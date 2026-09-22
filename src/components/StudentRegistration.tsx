@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GraduationCap, User, Hash, BookOpen, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
 import { Participant, Quiz, AppView } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface StudentRegistrationProps {
   quiz: Quiz;
@@ -15,7 +16,7 @@ export function StudentRegistration({ quiz, onRegister, onNavigate }: StudentReg
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !rollNumber.trim() || !department.trim()) {
       setError('Please fill in all required participant fields.');
@@ -35,8 +36,28 @@ export function StudentRegistration({ quiz, onRegister, onNavigate }: StudentReg
       totalScore: 0,
     };
 
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('participants').insert([
+          {
+            id: newParticipant.id,
+            name: newParticipant.name,
+            roll_number: newParticipant.rollNumber,
+            department: newParticipant.department,
+            email: newParticipant.email,
+            status: newParticipant.status,
+            correct_count: newParticipant.correctCount,
+            wrong_count: newParticipant.wrongCount,
+            total_score: newParticipant.totalScore,
+          }
+        ]);
+      } catch (err) {
+        console.error('Supabase insert error (using local state fallback):', err);
+      }
+    }
+
     onRegister(newParticipant);
-    onNavigate('student-interface');
+    onNavigate('student-waiting');
   };
 
   return (
@@ -155,9 +176,9 @@ export function StudentRegistration({ quiz, onRegister, onNavigate }: StudentReg
 
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-sm transition-colors text-sm"
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-sm transition-colors text-sm cursor-pointer"
             >
-              Continue to Quiz Instructions
+              Continue to Waiting Lobby
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
@@ -168,7 +189,7 @@ export function StudentRegistration({ quiz, onRegister, onNavigate }: StudentReg
             </span>
             <button
               onClick={() => onNavigate('admin-login')}
-              className="font-medium text-blue-600 hover:text-blue-800 transition-colors"
+              className="font-medium text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
             >
               Admin Portal
             </button>
