@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Quiz, Participant } from '../types';
 import { Clock, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface StudentInterfaceProps {
   quiz: Quiz;
@@ -20,6 +21,31 @@ export function StudentInterface({ quiz, participant, onBackToRegistration, onRe
   const question = quiz.questions[currentIdx] || quiz.questions[0];
   const totalQuestions = quiz.totalQuestions || quiz.questions.length;
 
+  // Subscribe to Supabase Realtime channel `quiz_live` for instant question sync
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    const currentSupabase = supabase;
+    const channel = currentSupabase.channel('quiz_live');
+
+    channel
+      .on('broadcast', { event: 'question-change' }, (payload) => {
+        if (payload.payload && typeof (payload.payload as any).questionIndex === 'number') {
+          const newIdx = (payload.payload as any).questionIndex;
+          setCurrentIdx(newIdx);
+          setTimeLeft(quiz.timerSeconds || 15);
+          setSelectedOption(null);
+          setIsSubmitted(false);
+          setIsTimeUp(false);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      currentSupabase.removeChannel(channel);
+    };
+  }, [quiz.timerSeconds]);
+
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (!isFinished && !isSubmitted) {
@@ -27,7 +53,6 @@ export function StudentInterface({ quiz, participant, onBackToRegistration, onRe
         setTimeLeft((prev) => {
           if (prev <= 1) {
             setIsTimeUp(true);
-            // Move to next question automatically after 2 seconds
             setTimeout(() => {
               if (currentIdx + 1 < totalQuestions) {
                 setCurrentIdx(c => c + 1);
@@ -49,14 +74,13 @@ export function StudentInterface({ quiz, participant, onBackToRegistration, onRe
   }, [currentIdx, totalQuestions, quiz.timerSeconds, isFinished, isSubmitted]);
 
   const handleSelectOption = (idx: number) => {
-    if (isSubmitted || isTimeUp || isFinished) return;
+    if (isSubmitted || isTimeUp || isFinished || !question) return;
     setSelectedOption(idx);
     setIsSubmitted(true);
 
     const isCorrect = idx === question.correctOptionIndex;
     onRecordAnswer(question.questionNumber, idx, isCorrect);
 
-    // Automatically advance after 1.5s
     setTimeout(() => {
       if (currentIdx + 1 < totalQuestions) {
         setCurrentIdx(c => c + 1);
@@ -78,7 +102,7 @@ export function StudentInterface({ quiz, participant, onBackToRegistration, onRe
           <p className="text-sm text-slate-600">Please register with your student credentials before entering the live session.</p>
           <button
             onClick={onBackToRegistration}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl text-sm transition-colors"
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl text-sm transition-colors cursor-pointer"
           >
             Go to Student Registration
           </button>
@@ -94,111 +118,106 @@ export function StudentInterface({ quiz, participant, onBackToRegistration, onRe
       <div className="max-w-xl mx-auto w-full flex items-center justify-between pb-4 border-b border-slate-800">
         <button
           onClick={onBackToRegistration}
-          className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors text-xs flex items-center gap-1"
+          className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors text-xs flex items-center gap-1 cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" /> Exit
         </button>
         <div className="text-center">
-          <div className="text-xs font-semibold text-blue-400 uppercase tracking-widest">
-            {participant.name} ({participant.rollNumber})
-          </div>
-          <div className="text-[11px] text-slate-400">{participant.department}</div>
+          <h2 className="text-sm font-bold text-white">{participant.name}</h2>
+          <p className="text-xs text-slate-400 font-mono">{participant.rollNumber} • {participant.department}</p>
         </div>
-        <div className="flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700">
-          <Clock className="w-4 h-4 text-amber-400" />
-          <span className={`text-sm font-bold ${timeLeft <= 5 ? 'text-rose-400 animate-pulse' : 'text-slate-200'}`}>
-            {timeLeft}s
-          </span>
+        <div className="flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-xl text-xs font-semibold text-emerald-400">
+          <Clock className="w-3.5 h-3.5" />
+          <span>{timeLeft}s</span>
         </div>
       </div>
 
-      {/* Main Student Remote Body */}
-      <div className="max-w-xl mx-auto w-full my-auto py-8 space-y-6">
+      {/* Main Student Remote Content */}
+      <div className="max-w-xl mx-auto w-full my-auto py-6">
         {isFinished ? (
-          <div className="bg-slate-800/90 border border-slate-700 p-8 rounded-3xl text-center space-y-4 shadow-xl">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center mx-auto text-2xl">
-              ✓
+          <div className="bg-slate-800 border border-slate-700 rounded-3xl p-8 text-center space-y-6 shadow-xl">
+            <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+              🎉
             </div>
-            <h2 className="text-2xl font-bold text-white">Quiz Finished</h2>
-            <p className="text-slate-300 text-sm">
-              Thank you for participating. Your response has been securely recorded.
+            <h3 className="text-2xl font-extrabold text-white">Quiz Finished! Thank you for participating.</h3>
+            <p className="text-sm text-slate-300">
+              Your responses have been successfully submitted to the event database.
             </p>
             <button
               onClick={onBackToRegistration}
-              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl text-xs transition-colors"
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl text-sm transition-colors cursor-pointer"
             >
               Back to Home
             </button>
           </div>
-        ) : (
+        ) : question ? (
           <div className="space-y-6">
             
-            {/* Title & Question number */}
-            <div className="text-center space-y-1">
-              <h1 className="text-lg sm:text-xl font-bold text-slate-100 tracking-tight uppercase">
-                {quiz.title}
-              </h1>
-              <p className="text-xs font-semibold text-blue-400">
-                Question {currentIdx + 1} / {totalQuestions}
-              </p>
-            </div>
-
-            {/* VERY IMPORTANT: NO QUESTION TEXT IS SENT OR DISPLAYED HERE */}
-            <div className="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-4 text-center">
-              <span className="text-xs text-slate-400">
-                🔒 Protected Auditorium Stream: Follow the projector screen for the question prompt. Select your answer below.
+            {/* Question Progress Header */}
+            <div className="flex items-center justify-between text-xs font-semibold">
+              <span className="text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full uppercase tracking-widest">
+                Question {currentIdx + 1} of {totalQuestions}
+              </span>
+              <span className="text-slate-400">
+                {isSubmitted ? 'Answer Locked ✔️' : isTimeUp ? 'Time Up!' : 'Select Option [A, B, C, D]'}
               </span>
             </div>
 
-            {/* Status alerts */}
-            {isTimeUp && (
-              <div className="p-4 bg-rose-500/20 border border-rose-500/40 rounded-2xl text-rose-300 text-center font-bold text-sm animate-bounce">
-                Time's up! Moving to next question...
-              </div>
-            )}
+            {/* Question Prompt */}
+            <div className="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 shadow-lg">
+              <h3 className="text-lg sm:text-xl font-bold text-white leading-relaxed">
+                {question.questionText}
+              </h3>
+            </div>
 
-            {isSubmitted && !isTimeUp && (
-              <div className="p-4 bg-emerald-500/20 border border-emerald-500/40 rounded-2xl text-emerald-300 text-center font-bold text-sm flex items-center justify-center gap-2">
-                <CheckCircle2 className="w-5 h-5" /> Answer submitted successfully. Loading next...
-              </div>
-            )}
-
-            {/* Answer Options [ A ] [ B ] [ C ] [ D ] */}
+            {/* Options Buttons */}
             <div className="grid grid-cols-1 gap-3.5">
               {question.options.map((option, idx) => {
-                const optLetter = ['A', 'B', 'C', 'D'][idx];
                 const isSelected = selectedOption === idx;
+                let btnStyle = 'bg-slate-800 border-slate-700 text-white hover:bg-slate-700';
+
+                if (isSubmitted) {
+                  if (isSelected) {
+                    btnStyle = 'bg-blue-600 border-blue-500 text-white shadow-lg';
+                  } else {
+                    btnStyle = 'bg-slate-800/50 border-slate-800 text-slate-500 opacity-60';
+                  }
+                }
+
                 return (
                   <button
                     key={idx}
                     disabled={isSubmitted || isTimeUp}
                     onClick={() => handleSelectOption(idx)}
-                    className={`flex items-center gap-4 p-5 rounded-2xl border text-left transition-all ${
-                      isSelected
-                        ? 'bg-blue-600 border-blue-500 text-white shadow-lg ring-2 ring-blue-400/50'
-                        : 'bg-slate-800/90 border-slate-700 text-slate-100 hover:border-slate-600 hover:bg-slate-800'
-                    }`}
+                    className={`w-full p-4 rounded-2xl border text-left font-medium text-sm flex items-center justify-between transition-all cursor-pointer ${btnStyle}`}
                   >
-                    <div className={`w-12 h-12 rounded-xl font-black text-lg flex items-center justify-center shrink-0 border ${
-                      isSelected ? 'bg-white text-blue-600 border-white' : 'bg-slate-900 text-blue-400 border-slate-700'
-                    }`}>
-                      {optLetter}
+                    <div className="flex items-center gap-3.5">
+                      <span className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center font-bold text-xs text-slate-300">
+                        {String.fromCharCode(65 + idx)}
+                      </span>
+                      <span>{option}</span>
                     </div>
-                    <div className="text-base font-medium flex-1">
-                      {option}
-                    </div>
+                    {isSubmitted && isSelected && (
+                      <CheckCircle2 className="w-5 h-5 text-blue-300" />
+                    )}
                   </button>
                 );
               })}
             </div>
 
           </div>
+        ) : (
+          <div className="text-center py-12 bg-slate-800 border border-slate-700 rounded-2xl">
+            <h3 className="text-lg font-bold text-slate-300">Waiting for Admin to Start Quiz</h3>
+            <p className="text-xs text-slate-400 mt-2">The live session will begin as soon as the administrator launches the quiz.</p>
+          </div>
         )}
       </div>
 
-      {/* Footer */}
-      <div className="max-w-xl mx-auto w-full text-center text-xs text-slate-500 border-t border-slate-800 pt-4">
-        Secure Student Remote • Anti-Cheat Verification Enabled
+      {/* Footer Status */}
+      <div className="max-w-xl mx-auto w-full pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <span>Connected to Live Event</span>
+        <span className="text-emerald-400 font-medium">Real-Time Sync Ready</span>
       </div>
 
     </div>

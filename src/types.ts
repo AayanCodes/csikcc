@@ -18,6 +18,7 @@ export interface Quiz {
   totalQuestions: number;
   questions: Question[];
   createdAt: string;
+  scheduledStartTime?: string; // ISO string or datetime string
 }
 
 export interface Participant {

@@ -11,74 +11,110 @@ import { SqlSchemaView } from './components/SqlSchemaView';
 import { QuizEditorModal } from './components/QuizEditorModal';
 import { initialQuizzes, initialParticipants } from './mockData';
 import { Quiz, Participant, AppView } from './types';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('admin-login');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
-  
-  const [quizzes, setQuizzes] = useState<Quiz[]>(() => {
-    const saved = localStorage.getItem('college_quizzes');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialQuizzes;
-  });
-
-  const [participants, setParticipants] = useState<Participant[]>(() => {
-    const saved = localStorage.getItem('college_participants');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialParticipants;
-  });
-
-  const [currentParticipant, setCurrentParticipant] = useState<Participant | null>(() => {
-    const saved = localStorage.getItem('college_current_participant');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialParticipants[0];
-  });
-
-  const [selectedQuizId, setSelectedQuizId] = useState<string>(() => quizzes[0]?.id || 'quiz-1');
+  const [quizzes, setQuizzes] = useState<Quiz[]>(initialQuizzes);
+  const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
+  const [currentParticipant, setCurrentParticipant] = useState<Participant | null>(null);
+  const [selectedQuizId, setSelectedQuizId] = useState<string>('');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
 
-  useEffect(() => {
-    localStorage.setItem('college_quizzes', JSON.stringify(quizzes));
-  }, [quizzes]);
+  const selectedQuiz = quizzes.find(q => q.id === selectedQuizId) || quizzes[0] || {
+    id: 'default',
+    title: 'No Quiz Available',
+    description: 'Please create a quiz from the Admin Portal.',
+    status: 'Draft',
+    currentQuestionIndex: 0,
+    timerSeconds: 15,
+    totalQuestions: 0,
+    createdAt: new Date().toLocaleDateString(),
+    questions: []
+  };
 
+  // Setup Supabase Realtime channel `quiz_live` and fetch live data
   useEffect(() => {
-    localStorage.setItem('college_participants', JSON.stringify(participants));
-  }, [participants]);
+    if (!isSupabaseConfigured || !supabase) return;
 
-  useEffect(() => {
-    if (currentParticipant) {
-      localStorage.setItem('college_current_participant', JSON.stringify(currentParticipant));
-    } else {
-      localStorage.removeItem('college_current_participant');
+    const currentSupabase = supabase;
+
+    // Fetch initial participants from Supabase
+    const fetchParticipants = async () => {
+      const { data, error } = await currentSupabase.from('participants').select('*');
+      if (!error && data && data.length > 0) {
+        const mapped: Participant[] = data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          rollNumber: row.roll_number,
+          department: row.department,
+          email: row.email || '',
+          status: row.status || 'IN_PROGRESS',
+          correctCount: row.correct_count || 0,
+          wrongCount: row.wrong_count || 0,
+          unansweredCount: row.unanswered_count || 0,
+          totalScore: row.total_score || 0,
+        }));
+        setParticipants(mapped);
+      }
+    };
+
+    fetchParticipants();
+
+    const channel = currentSupabase.channel('quiz_live');
+
+    channel
+      .on('broadcast', { event: 'quiz-update' }, (payload) => {
+        if (payload.payload && (payload.payload as any).quizzes) {
+          setQuizzes((payload.payload as any).quizzes);
+        }
+        if (payload.payload && (payload.payload as any).selectedQuizId) {
+          setSelectedQuizId((payload.payload as any).selectedQuizId);
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, () => {
+        fetchParticipants();
+      })
+      .subscribe();
+
+    return () => {
+      currentSupabase.removeChannel(channel);
+    };
+  }, []);
+
+  const broadcastQuizState = (updatedQuizzes: Quiz[], quizId: string) => {
+    if (isSupabaseConfigured && supabase) {
+      supabase.channel('quiz_live').send({
+        type: 'broadcast',
+        event: 'quiz-update',
+        payload: { quizzes: updatedQuizzes, selectedQuizId: quizId },
+      });
     }
-  }, [currentParticipant]);
-
-  const selectedQuiz = quizzes.find(q => q.id === selectedQuizId) || quizzes[0];
+  };
 
   const handleStartQuiz = (quizId: string) => {
     setSelectedQuizId(quizId);
-    // Update quiz status to Active so all waiting students auto-launch simultaneously
-    setQuizzes(quizzes.map(q => q.id === quizId ? { ...q, status: 'Active', currentQuestionIndex: 0 } : q));
+    const updated = quizzes.map(q => q.id === quizId ? { ...q, status: 'Active' as const, currentQuestionIndex: 0 } : q);
+    setQuizzes(updated);
+    broadcastQuizState(updated, quizId);
     setCurrentView('auditorium');
   };
 
   const handleDeleteQuiz = (quizId: string) => {
-    if (quizzes.length <= 1) {
-      alert('Cannot delete the last remaining quiz.');
-      return;
+    const updated = quizzes.filter(q => q.id !== quizId);
+    setQuizzes(updated);
+    if (selectedQuizId === quizId) {
+      setSelectedQuizId(updated[0]?.id || '');
     }
-    setQuizzes(quizzes.filter(q => q.id !== quizId));
+    broadcastQuizState(updated, updated[0]?.id || '');
   };
 
   const handleSaveQuiz = (newQuiz: Quiz) => {
-    setQuizzes([newQuiz, ...quizzes]);
+    const updated = [newQuiz, ...quizzes];
+    setQuizzes(updated);
     setSelectedQuizId(newQuiz.id);
+    broadcastQuizState(updated, newQuiz.id);
   };
 
   const handleRegisterParticipant = (participant: Participant) => {
@@ -87,8 +123,24 @@ export default function App() {
     setCurrentView('student-waiting');
   };
 
-  const handleRecordAnswer = (questionNumber: number, optionIndex: number, isCorrect: boolean) => {
+  const handleRecordAnswer = async (questionNumber: number, optionIndex: number, isCorrect: boolean) => {
     if (!currentParticipant) return;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('answers').insert([
+          {
+            participant_id: currentParticipant.id,
+            quiz_id: selectedQuiz.id,
+            question_number: questionNumber,
+            selected_option_index: optionIndex,
+            is_correct: isCorrect,
+          }
+        ]);
+      } catch (err) {
+        console.error('Error inserting answer to Supabase:', err);
+      }
+    }
 
     setParticipants(prev => prev.map(p => {
       if (p.id === currentParticipant.id) {

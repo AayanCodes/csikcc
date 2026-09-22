@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Clock, ShieldCheck, Play, Sparkles, CheckCircle2 } from 'lucide-react';
 import { Participant, Quiz } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface StudentWaitingLobbyProps {
   quiz: Quiz;
@@ -15,37 +16,65 @@ export function StudentWaitingLobby({
   onEnterQuiz,
   onBackToRegistration,
 }: StudentWaitingLobbyProps) {
-  const [countdown, setCountdown] = useState<string>('Waiting for Host...');
-  const scheduledTime = 'Today, 10:00 AM (Live Session)';
+  const [countdown, setCountdown] = useState<string>('Calculating...');
+
+  // Target start time from quiz or default to 5 minutes from now
+  const targetTime = quiz.scheduledStartTime ? new Date(quiz.scheduledStartTime).getTime() : Date.now() + 5 * 60 * 1000;
 
   // Check quiz status automatically. If quiz becomes Active or Published, enter quiz automatically!
   useEffect(() => {
     if (quiz.status === 'Active' || quiz.status === 'Published') {
-      // Host has started the quiz!
       const timer = setTimeout(() => {
         onEnterQuiz();
-      }, 1000);
+      }, 500);
       return () => clearTimeout(timer);
     }
   }, [quiz.status, onEnterQuiz]);
 
-  // Simulate countdown ticking
+  // Subscribe to Supabase Realtime channel `quiz_live` to transition instantly when admin starts
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    const currentSupabase = supabase;
+    const channel = currentSupabase.channel('quiz_live');
+
+    channel
+      .on('broadcast', { event: 'quiz-update' }, (payload) => {
+        if (payload.payload && (payload.payload as any).quizzes) {
+          const updatedQuizzes = (payload.payload as any).quizzes;
+          const currentQ = updatedQuizzes.find((q: Quiz) => q.id === quiz.id);
+          if (currentQ && (currentQ.status === 'Active' || currentQ.status === 'Published')) {
+            onEnterQuiz();
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      currentSupabase.removeChannel(channel);
+    };
+  }, [quiz.id, onEnterQuiz]);
+
+  // Live Countdown Timer based on actual timestamp difference
   useEffect(() => {
     const interval = setInterval(() => {
-      const now = new Date();
-      const target = new Date();
-      target.setHours(10, 0, 0, 0);
-      const diff = target.getTime() - now.getTime();
+      const now = Date.now();
+      const diff = targetTime - now;
       if (diff > 0) {
+        const hours = Math.floor(diff / (1000 * 60 * 60));
         const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         const secs = Math.floor((diff % (1000 * 60)) / 1000);
-        setCountdown(`${mins}m ${secs}s remaining`);
+        if (hours > 0) {
+          setCountdown(`${hours}h ${mins}m ${secs}s remaining`);
+        } else {
+          setCountdown(`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')} remaining`);
+        }
       } else {
-        setCountdown('Ready to Launch - Awaiting Organizer Start Signal');
+        setCountdown('Event Time Reached - Awaiting Host Start Signal');
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [targetTime]);
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-900 via-slate-800 to-blue-950 py-12 px-4 sm:px-6 lg:px-8 flex items-center justify-center text-white">
@@ -88,7 +117,9 @@ export function StudentWaitingLobby({
                 </div>
                 <div>
                   <p className="text-xs text-blue-300 font-medium">Scheduled Start Time</p>
-                  <p className="text-sm font-bold text-white">{scheduledTime}</p>
+                  <p className="text-sm font-bold text-white">
+                    {quiz.scheduledStartTime ? new Date(quiz.scheduledStartTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'As Scheduled by Organizer'}
+                  </p>
                 </div>
               </div>
               <div className="text-right">
@@ -104,14 +135,14 @@ export function StudentWaitingLobby({
                 <div className="w-4 h-4 rounded-full bg-amber-400 animate-ping absolute" />
                 <div className="w-3 h-3 rounded-full bg-amber-400 relative" />
               </div>
-              <h4 className="text-sm font-bold text-slate-200">Waiting for Organizer to Start Quiz</h4>
+              <h4 className="text-sm font-bold text-slate-200">Waiting for organizer to commence the challenge...</h4>
               <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                Please keep this screen open. When the admin clicks <span className="text-blue-300 font-semibold">"Start Live Quiz"</span>, your portal will activate automatically at the exact same second!
+                Please keep this screen open. When the admin starts the quiz, your screen will switch automatically without refreshing.
               </p>
             </div>
           </div>
 
-          {/* Manual Entry Button (if admin already started or for testing) */}
+          {/* Manual Entry / Change details */}
           <div className="pt-2 flex gap-3">
             <button
               onClick={onBackToRegistration}
@@ -123,7 +154,7 @@ export function StudentWaitingLobby({
               onClick={onEnterQuiz}
               className="flex-2 py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-sm shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
-              <Play className="w-4 h-4 fill-white" /> Enter Quiz Now (Force)
+              <Play className="w-4 h-4 fill-white" /> Enter Quiz Now
             </button>
           </div>
 
