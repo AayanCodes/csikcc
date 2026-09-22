@@ -178,7 +178,7 @@ export function StudentRegistration({ quiz, onRegister, onNavigate }: StudentReg
               type="submit"
               className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-sm transition-colors text-sm cursor-pointer"
             >
-              Continue to Waiting Lobby
+              Continue to Quiz Instructions
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
