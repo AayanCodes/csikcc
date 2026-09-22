@@ -1,0 +1,6 @@
+{
+  "name": "College Live Quiz Platform",
+  "description": "Production-ready college live quiz platform with admin controls, auditorium display, and secure student remote clients.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
