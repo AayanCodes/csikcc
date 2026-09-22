@@ -50,5 +50,6 @@ export type AppView =
   | 'admin-results'
   | 'auditorium'
   | 'student-registration'
+  | 'student-waiting'
   | 'student-interface'
   | 'sql-schema';

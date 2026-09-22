@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { 
   Monitor, Plus, Play, Award, Edit3, Eye, Copy, Trash2, 
-  FileSpreadsheet, Users, CheckCircle2, Clock, BookOpen 
+  FileSpreadsheet, Users, CheckCircle2, Clock, BookOpen, QrCode 
 } from 'lucide-react';
 import { Quiz, Participant, AppView } from '../types';
+import { QRCodeModal } from './QRCodeModal';
 
 interface AdminDashboardProps {
   quizzes: Quiz[];
@@ -25,6 +26,7 @@ export function AdminDashboard({
   onViewResults,
 }: AdminDashboardProps) {
   const [activeQuizId, setActiveQuizId] = useState<string>(quizzes[0]?.id || 'quiz-1');
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const selectedQuiz = quizzes.find(q => q.id === activeQuizId) || quizzes[0];
 
   const completedCount = participants.filter(p => p.status === 'COMPLETED').length;
@@ -42,7 +44,14 @@ export function AdminDashboard({
               Synchronized auditorium display, automatic timer progression, and secured student remotes.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => setIsQRModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl text-sm transition-colors shadow-xs"
+            >
+              <QrCode className="w-4 h-4" />
+              Student Login QR
+            </button>
             <button
               onClick={() => onNavigate('auditorium')}
               className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl text-sm transition-colors shadow-xs"
@@ -59,6 +68,8 @@ export function AdminDashboard({
             </button>
           </div>
         </div>
+
+        <QRCodeModal isOpen={isQRModalOpen} onClose={() => setIsQRModalOpen(false)} />
 
         {/* Live Control Panel Card */}
         <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs">

@@ -5,6 +5,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { ResultsView } from './components/ResultsView';
 import { AuditoriumScreen } from './components/AuditoriumScreen';
 import { StudentRegistration } from './components/StudentRegistration';
+import { StudentWaitingLobby } from './components/StudentWaitingLobby';
 import { StudentInterface } from './components/StudentInterface';
 import { SqlSchemaView } from './components/SqlSchemaView';
 import { QuizEditorModal } from './components/QuizEditorModal';
@@ -24,8 +25,8 @@ export default function App() {
 
   const handleStartQuiz = (quizId: string) => {
     setSelectedQuizId(quizId);
-    // Update quiz status to Active
-    setQuizzes(quizzes.map(q => q.id === quizId ? { ...q, status: 'Published', currentQuestionIndex: 0 } : q));
+    // Update quiz status to Active so all waiting students auto-launch simultaneously
+    setQuizzes(quizzes.map(q => q.id === quizId ? { ...q, status: 'Active', currentQuestionIndex: 0 } : q));
     setCurrentView('auditorium');
   };
 
@@ -45,6 +46,7 @@ export default function App() {
   const handleRegisterParticipant = (participant: Participant) => {
     setCurrentParticipant(participant);
     setParticipants(prev => [participant, ...prev]);
+    setCurrentView('student-waiting');
   };
 
   const handleRecordAnswer = (questionNumber: number, optionIndex: number, isCorrect: boolean) => {
@@ -131,6 +133,15 @@ export default function App() {
             quiz={selectedQuiz}
             onRegister={handleRegisterParticipant}
             onNavigate={(view) => setCurrentView(view)}
+          />
+        )}
+
+        {currentView === 'student-waiting' && (
+          <StudentWaitingLobby
+            quiz={selectedQuiz}
+            participant={currentParticipant}
+            onEnterQuiz={() => setCurrentView('student-interface')}
+            onBackToRegistration={() => setCurrentView('student-registration')}
           />
         )}
 
