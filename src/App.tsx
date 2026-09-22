@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -15,11 +15,49 @@ import { Quiz, Participant, AppView } from './types';
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('admin-login');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
-  const [quizzes, setQuizzes] = useState<Quiz[]>(initialQuizzes);
-  const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
-  const [currentParticipant, setCurrentParticipant] = useState<Participant | null>(initialParticipants[0]);
-  const [selectedQuizId, setSelectedQuizId] = useState<string>(initialQuizzes[0].id);
+  
+  const [quizzes, setQuizzes] = useState<Quiz[]>(() => {
+    const saved = localStorage.getItem('college_quizzes');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return initialQuizzes;
+  });
+
+  const [participants, setParticipants] = useState<Participant[]>(() => {
+    const saved = localStorage.getItem('college_participants');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return initialParticipants;
+  });
+
+  const [currentParticipant, setCurrentParticipant] = useState<Participant | null>(() => {
+    const saved = localStorage.getItem('college_current_participant');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return initialParticipants[0];
+  });
+
+  const [selectedQuizId, setSelectedQuizId] = useState<string>(() => quizzes[0]?.id || 'quiz-1');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('college_quizzes', JSON.stringify(quizzes));
+  }, [quizzes]);
+
+  useEffect(() => {
+    localStorage.setItem('college_participants', JSON.stringify(participants));
+  }, [participants]);
+
+  useEffect(() => {
+    if (currentParticipant) {
+      localStorage.setItem('college_current_participant', JSON.stringify(currentParticipant));
+    } else {
+      localStorage.removeItem('college_current_participant');
+    }
+  }, [currentParticipant]);
 
   const selectedQuiz = quizzes.find(q => q.id === selectedQuizId) || quizzes[0];
 
