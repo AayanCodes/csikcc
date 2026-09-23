@@ -386,12 +386,12 @@ export default function App() {
       )}
 
       {/* VIEW: STUDENT QUIZ INTERFACE */}
-      {currentView === 'student-quiz' && activeQuiz && quizState && currentParticipant && (
+      {currentView === 'student-quiz' && resolvedQuiz && quizState && currentParticipant && (
         <StudentQuiz
           quiz={resolvedQuiz}
           quizState={quizState}
           currentQuestion={currentActiveQuestion}
-          totalQuestions={questions.length || activeQuiz.totalQuestions}
+          totalQuestions={questions.length || resolvedQuiz.totalQuestions}
           participant={currentParticipant}
           existingAnswers={studentAnswers}
         />

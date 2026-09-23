@@ -472,6 +472,124 @@ export async function adminNextQuestion(
   }
 }
 
+export async function adminPreviousQuestion(
+  quizId: string,
+  prevQuestion: Question
+): Promise<void> {
+  try {
+    const duration = prevQuestion.durationSeconds || 30;
+    const now = Date.now();
+    const endTime = now + duration * 1000;
+
+    await setDoc(
+      doc(db, 'quizState', quizId),
+      {
+        quizId,
+        status: 'LIVE',
+        currentQuestionNumber: prevQuestion.questionNumber,
+        currentQuestionId: prevQuestion.id,
+        questionStartTime: now,
+        questionEndTime: endTime,
+        durationSeconds: duration,
+        updatedAt: now,
+      } as QuizState,
+      { merge: true }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `quizState/${quizId}`);
+  }
+}
+
+export async function adminJumpToQuestion(
+  quizId: string,
+  targetQuestion: Question
+): Promise<void> {
+  try {
+    const duration = targetQuestion.durationSeconds || 30;
+    const now = Date.now();
+    const endTime = now + duration * 1000;
+
+    await setDoc(
+      doc(db, 'quizState', quizId),
+      {
+        quizId,
+        status: 'LIVE',
+        currentQuestionNumber: targetQuestion.questionNumber,
+        currentQuestionId: targetQuestion.id,
+        questionStartTime: now,
+        questionEndTime: endTime,
+        durationSeconds: duration,
+        updatedAt: now,
+      } as QuizState,
+      { merge: true }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `quizState/${quizId}`);
+  }
+}
+
+export async function adminRestartQuestionTimer(
+  quizId: string,
+  durationSeconds?: number
+): Promise<void> {
+  try {
+    const duration = durationSeconds || 30;
+    const now = Date.now();
+    const endTime = now + duration * 1000;
+
+    await setDoc(
+      doc(db, 'quizState', quizId),
+      {
+        questionStartTime: now,
+        questionEndTime: endTime,
+        durationSeconds: duration,
+        status: 'LIVE',
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `quizState/${quizId}`);
+  }
+}
+
+export async function adminExtendQuestionTimer(
+  quizId: string,
+  extraSeconds: number
+): Promise<void> {
+  try {
+    const qsDoc = await getDoc(doc(db, 'quizState', quizId));
+    const now = Date.now();
+    let currentEndTime = now;
+    let startTime = now;
+    let oldDuration = 30;
+
+    if (qsDoc.exists()) {
+      const qs = qsDoc.data() as QuizState;
+      currentEndTime = qs.questionEndTime || now;
+      startTime = qs.questionStartTime || now;
+      oldDuration = qs.durationSeconds || 30;
+    }
+
+    const baseTime = currentEndTime > now ? currentEndTime : now;
+    const newEndTime = baseTime + extraSeconds * 1000;
+    const newDuration = Math.max(oldDuration + extraSeconds, Math.ceil((newEndTime - startTime) / 1000));
+
+    await setDoc(
+      doc(db, 'quizState', quizId),
+      {
+        questionEndTime: newEndTime,
+        durationSeconds: newDuration,
+        status: 'LIVE',
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `quizState/${quizId}`);
+  }
+}
+
 export async function adminEndQuiz(quizId: string): Promise<void> {
   try {
     const now = Date.now();
@@ -630,15 +748,100 @@ export async function adminResetQuiz(quizId: string, firstQuestionId?: string): 
 
 export async function adminSaveQuestion(question: Question): Promise<void> {
   try {
-    await setDoc(doc(db, 'questions', question.id), question);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'questions', question.id), question);
+
+    if (question.quizId) {
+      // Update totalQuestions if needed
+      const qQuery = query(collection(db, 'questions'), where('quizId', '==', question.quizId));
+      const snapshot = await getDocs(qQuery);
+      const allQuestions: Question[] = [];
+      let exists = false;
+      snapshot.forEach((d) => {
+        const data = d.data() as Question;
+        if (data.id === question.id) {
+          exists = true;
+          allQuestions.push(question);
+        } else {
+          allQuestions.push(data);
+        }
+      });
+      if (!exists) {
+        allQuestions.push(question);
+      }
+
+      batch.set(
+        doc(db, 'quizzes', question.quizId),
+        {
+          totalQuestions: allQuestions.length,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    }
+
+    await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `questions/${question.id}`);
   }
 }
 
-export async function adminDeleteQuestion(questionId: string): Promise<void> {
+export async function adminDeleteQuestion(questionId: string, quizId?: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, 'questions', questionId));
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'questions', questionId));
+
+    if (quizId) {
+      const qQuery = query(collection(db, 'questions'), where('quizId', '==', quizId));
+      const snapshot = await getDocs(qQuery);
+      const remaining: Question[] = [];
+      snapshot.forEach((d) => {
+        if (d.id !== questionId) {
+          remaining.push(d.data() as Question);
+        }
+      });
+
+      // Sort remaining questions by existing questionNumber
+      remaining.sort((a, b) => a.questionNumber - b.questionNumber);
+
+      // Renumber sequentially 1..N
+      remaining.forEach((q, idx) => {
+        const newNumber = idx + 1;
+        if (q.questionNumber !== newNumber) {
+          batch.update(doc(db, 'questions', q.id), { questionNumber: newNumber });
+        }
+      });
+
+      // Update quiz doc totalQuestions
+      batch.set(
+        doc(db, 'quizzes', quizId),
+        {
+          totalQuestions: remaining.length,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      // Update quizState if question count changed
+      const quizStateSnap = await getDoc(doc(db, 'quizState', quizId));
+      if (quizStateSnap.exists()) {
+        const qs = quizStateSnap.data() as QuizState;
+        let currentNum = qs.currentQuestionNumber;
+        if (currentNum > remaining.length && remaining.length > 0) {
+          currentNum = remaining.length;
+        } else if (remaining.length === 0) {
+          currentNum = 1;
+        }
+        const activeQ = remaining.find((q) => q.questionNumber === currentNum);
+        batch.update(doc(db, 'quizState', quizId), {
+          currentQuestionNumber: currentNum,
+          currentQuestionId: activeQ ? activeQ.id : '',
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
+    await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `questions/${questionId}`);
   }

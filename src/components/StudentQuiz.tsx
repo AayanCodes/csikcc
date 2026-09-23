@@ -112,26 +112,46 @@ export const StudentQuiz: React.FC<StudentQuizProps> = ({
     );
   }
 
+  const totalDuration = quizState.durationSeconds || currentQuestion?.durationSeconds || 30;
+  const percentRemaining = Math.max(0, Math.min(100, (remainingSeconds / totalDuration) * 100));
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between py-6 px-4 sm:px-6">
       <div className="max-w-3xl w-full mx-auto space-y-6">
         {/* Header: Question Number & Authoritative Timer */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-          <div>
-            <span className="text-xs font-bold tracking-widest text-blue-600 uppercase">
-              QUESTION {currentQuestion.questionNumber} / {totalQuestions}
-            </span>
+        <div className="space-y-3 pb-4 border-b border-slate-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-bold tracking-widest text-blue-600 uppercase">
+                QUESTION {currentQuestion.questionNumber} / {totalQuestions}
+              </span>
+            </div>
+
+            {/* Authoritative Timer */}
+            <div
+              className={`font-mono text-2xl sm:text-3xl font-bold px-3.5 py-1 rounded border tracking-wider transition-colors flex items-center gap-2 ${
+                remainingSeconds <= 5
+                  ? 'bg-red-50 text-red-600 border-red-200 animate-pulse'
+                  : 'bg-white text-slate-900 border-slate-200'
+              }`}
+            >
+              <span className="text-base">⏱️</span>
+              <span>{formatTimer(remainingSeconds)}</span>
+            </div>
           </div>
 
-          {/* Authoritative Timer */}
-          <div
-            className={`font-mono text-2xl sm:text-3xl font-bold px-3.5 py-1 rounded border tracking-wider transition-colors ${
-              remainingSeconds <= 5
-                ? 'bg-red-50 text-red-600 border-red-200 animate-pulse'
-                : 'bg-white text-slate-900 border-slate-200'
-            }`}
-          >
-            {formatTimer(remainingSeconds)}
+          {/* Real-time Timer Progress Bar */}
+          <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+            <div
+              className={`h-full transition-all duration-300 rounded-full ${
+                remainingSeconds <= 5
+                  ? 'bg-red-500 animate-pulse'
+                  : remainingSeconds <= 10
+                  ? 'bg-amber-500'
+                  : 'bg-blue-600'
+              }`}
+              style={{ width: `${percentRemaining}%` }}
+            />
           </div>
         </div>
 

@@ -10,6 +10,9 @@ import {
 import {
   adminStartQuiz,
   adminNextQuestion,
+  adminPreviousQuestion,
+  adminRestartQuestionTimer,
+  adminExtendQuestionTimer,
   adminEndQuiz,
   adminPublishResults,
   adminResetQuiz,
@@ -100,6 +103,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const currentQNum = quizState?.currentQuestionNumber || 1;
   const currentQuestion = questions.find((q) => q.questionNumber === currentQNum);
   const isLastQuestion = currentQNum >= questions.length;
+
+  // Live real-time countdown timer for Admin Dashboard
+  const [adminRemainingSeconds, setAdminRemainingSeconds] = useState<number>(0);
+
+  useEffect(() => {
+    const updateTimer = () => {
+      if (!quizState?.questionEndTime || quizState.questionEndTime <= 0 || quizState.status !== 'LIVE') {
+        setAdminRemainingSeconds(0);
+        return;
+      }
+      const now = Date.now();
+      const diffMs = quizState.questionEndTime - now;
+      const sec = Math.max(0, Math.ceil(diffMs / 1000));
+      setAdminRemainingSeconds(sec);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 250);
+    return () => clearInterval(interval);
+  }, [quizState?.questionEndTime, quizState?.status]);
 
   const showFeedback = (msg: string) => {
     setActionFeedback(msg);
@@ -200,6 +223,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } catch (err) {
       console.error('Failed to advance question:', err);
       setActionError('Failed to advance question: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handlePrev = async () => {
+    setActionError(null);
+    const prevQNum = currentQNum - 1;
+    const prevQ = questions.find((q) => q.questionNumber === prevQNum);
+    if (!prevQ) {
+      setActionError(`No question found for Question #${prevQNum}.`);
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await adminPreviousQuestion(quiz.id, prevQ);
+      showFeedback(`Returned to Question #${prevQNum} across all connected student and auditorium screens.`);
+    } catch (err) {
+      console.error('Failed to return to previous question:', err);
+      setActionError('Failed to return to previous question: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRestartTimer = async () => {
+    setActionError(null);
+    setActionLoading(true);
+    try {
+      const dur = currentQuestion?.durationSeconds || 30;
+      await adminRestartQuestionTimer(quiz.id, dur);
+      showFeedback(`Timer restarted to ${dur}s for Question #${currentQNum}.`);
+    } catch (err) {
+      console.error('Failed to restart timer:', err);
+      setActionError('Failed to restart timer: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleExtendTimer = async (seconds: number) => {
+    setActionError(null);
+    setActionLoading(true);
+    try {
+      await adminExtendQuestionTimer(quiz.id, seconds);
+      showFeedback(`Added +${seconds} seconds to Question #${currentQNum} timer.`);
+    } catch (err) {
+      console.error('Failed to extend timer:', err);
+      setActionError('Failed to extend timer: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setActionLoading(false);
     }
@@ -553,14 +625,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               {/* Live Question Display */}
               {currentStatus === 'LIVE' && currentQuestion && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-3">
-                  <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-blue-600">
-                    <span>Active Question {currentQuestion.questionNumber} of {questions.length}</span>
-                    <span>Duration: {currentQuestion.durationSeconds}s</span>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-4 shadow-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                    <div>
+                      <span className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                        Active Question {currentQuestion.questionNumber} of {questions.length}
+                      </span>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        Authoritative timer duration: <strong>{quizState?.durationSeconds || currentQuestion.durationSeconds || 30}s</strong>
+                      </div>
+                    </div>
+
+                    {/* Admin Live Timer Synchronized Badge */}
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`font-mono text-xl sm:text-2xl font-bold px-3 py-1 rounded border tracking-wider flex items-center gap-1.5 transition-colors ${
+                          adminRemainingSeconds <= 5
+                            ? 'bg-red-50 text-red-600 border-red-300 animate-pulse'
+                            : adminRemainingSeconds <= 10
+                            ? 'bg-amber-50 text-amber-700 border-amber-300'
+                            : 'bg-white text-slate-900 border-slate-300'
+                        }`}
+                      >
+                        <span>⏱️</span>
+                        <span>{String(Math.floor(adminRemainingSeconds / 60)).padStart(2, '0')}:{String(adminRemainingSeconds % 60).padStart(2, '0')}</span>
+                        {adminRemainingSeconds <= 0 && (
+                          <span className="text-[10px] uppercase font-bold tracking-wider bg-red-600 text-white px-1.5 py-0.5 rounded ml-1">
+                            Expired
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <h3 className="text-lg font-medium text-slate-900">
+
+                  {/* Real-time Visual Progress Bar */}
+                  <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 rounded-full ${
+                        adminRemainingSeconds <= 5
+                          ? 'bg-red-500 animate-pulse'
+                          : adminRemainingSeconds <= 10
+                          ? 'bg-amber-500'
+                          : 'bg-blue-600'
+                      }`}
+                      style={{
+                        width: `${Math.max(
+                          0,
+                          Math.min(
+                            100,
+                            (adminRemainingSeconds / (quizState?.durationSeconds || currentQuestion.durationSeconds || 30)) * 100
+                          )
+                        )}%`,
+                      }}
+                    />
+                  </div>
+
+                  <h3 className="text-lg font-medium text-slate-900 leading-snug">
                     {currentQuestion.questionText}
                   </h3>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     {currentQuestion.options.map((opt, idx) => (
                       <div
@@ -575,6 +698,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {idx === currentQuestion.correctOptionIndex && ' (Correct Answer)'}
                       </div>
                     ))}
+                  </div>
+
+                  {/* Quick Timer Controls for Live Question */}
+                  <div className="pt-2 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                      Live Timer Adjustments:
+                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={handleRestartTimer}
+                        disabled={actionLoading}
+                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded border border-slate-300 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                        title="Restart timer from beginning for this question"
+                      >
+                        <span>🔄</span>
+                        <span>Restart Timer ({currentQuestion.durationSeconds || 30}s)</span>
+                      </button>
+                      <button
+                        onClick={() => handleExtendTimer(15)}
+                        disabled={actionLoading}
+                        className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded border border-blue-200 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                        title="Add 15 seconds to countdown"
+                      >
+                        <span>⏱️</span>
+                        <span>+15s Extra Time</span>
+                      </button>
+                      <button
+                        onClick={() => handleExtendTimer(30)}
+                        disabled={actionLoading}
+                        className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded border border-blue-200 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                        title="Add 30 seconds to countdown"
+                      >
+                        <span>⏱️</span>
+                        <span>+30s Extra Time</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -592,35 +751,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </span>
                   )}
                 </div>
-
-                {/* Inline Confirmation Card for Destructive Actions (Replaces blocked window.confirm) */}
-                {confirmModal && (
-                  <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-300 rounded-lg space-y-3">
-                    <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
-                      <span>⚠️</span>
-                      <span>{confirmModal.title}</span>
-                    </div>
-                    <p className="text-xs text-amber-800 leading-relaxed">
-                      {confirmModal.message}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={confirmModal.onConfirm}
-                        disabled={actionLoading}
-                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded shadow-xs transition-colors cursor-pointer"
-                      >
-                        {confirmModal.confirmLabel || 'Yes, Confirm & Proceed'}
-                      </button>
-                      <button
-                        onClick={() => setConfirmModal(null)}
-                        disabled={actionLoading}
-                        className="px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-medium rounded transition-colors cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
 
                 {/* Question Count Alert if 0 questions */}
                 {questions.length === 0 && (
@@ -652,6 +782,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   {currentStatus === 'LIVE' && (
                     <>
+                      {currentQNum > 1 && (
+                        <button
+                          onClick={handlePrev}
+                          disabled={actionLoading}
+                          className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded border border-slate-300 shadow-2xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>← PREVIOUS QUESTION</span>
+                          <span>(Q{currentQNum - 1})</span>
+                        </button>
+                      )}
+
                       {!isLastQuestion ? (
                         <button
                           onClick={handleNext}
@@ -1122,20 +1263,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           onClick={() => {
                             setConfirmModal({
                               title: `Delete Question #${q.questionNumber}?`,
-                              message: `Are you sure you want to delete Question #${q.questionNumber}: "${q.questionText}"?`,
+                              message: `Are you sure you want to delete Question #${q.questionNumber}: "${q.questionText}"? This will update the quiz total count and renumber subsequent questions.`,
                               confirmLabel: 'Delete Question',
                               onConfirm: async () => {
-                                setConfirmModal(null);
                                 try {
-                                  await adminDeleteQuestion(q.id);
-                                  showFeedback(`Question #${q.questionNumber} deleted.`);
+                                  setActionLoading(true);
+                                  await adminDeleteQuestion(q.id, quiz.id);
+                                  setConfirmModal(null);
+                                  showFeedback(`Question #${q.questionNumber} deleted successfully.`);
                                 } catch (err) {
                                   setActionError('Failed to delete question: ' + (err instanceof Error ? err.message : String(err)));
+                                } finally {
+                                  setActionLoading(false);
                                 }
                               },
                             });
                           }}
-                          className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 border border-red-200 rounded cursor-pointer"
+                          className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 border border-red-200 hover:bg-red-50 rounded transition-colors cursor-pointer"
                         >
                           Delete
                         </button>
@@ -1472,12 +1616,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button
                   onClick={() => {
                     setShowStudentPreviewModal(false);
-                    onOpenStudentLogin();
+                    onOpenStudentLogin(quiz.id);
                   }}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded shadow-xs cursor-pointer flex items-center gap-1"
                 >
                   <span>Switch to Student Login Page</span>
                   <span>→</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Confirmation Modal Dialog for Destructive / Critical Actions */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150">
+            <div className="bg-amber-500 text-white px-5 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">⚠️</span>
+                <span className="font-bold text-sm tracking-wide">{confirmModal.title}</span>
+              </div>
+              <button
+                onClick={() => {
+                  if (!actionLoading) setConfirmModal(null);
+                }}
+                disabled={actionLoading}
+                className="text-white/80 hover:text-white text-base font-bold cursor-pointer disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-700 leading-relaxed">
+                {confirmModal.message}
+              </p>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => setConfirmModal(null)}
+                  disabled={actionLoading}
+                  className="px-4 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold rounded transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmModal.onConfirm}
+                  disabled={actionLoading}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {actionLoading ? (
+                    <>
+                      <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <span>{confirmModal.confirmLabel || 'Yes, Delete'}</span>
+                  )}
                 </button>
               </div>
             </div>

@@ -94,25 +94,49 @@ export const AuditoriumScreen: React.FC<AuditoriumScreenProps> = ({
       {status === 'LIVE' && currentQuestion && (
         <div className="flex-1 flex flex-col justify-between max-w-7xl mx-auto w-full">
           {/* Top Bar: Event Name & Question Number */}
-          <div className="flex items-center justify-between pb-8 border-b-2 border-slate-200">
-            <div>
-              <div className="text-lg md:text-xl font-bold tracking-widest text-blue-600 uppercase mb-1">
-                {quiz?.title || 'COLLEGE LIVE QUIZ'}
+          <div className="space-y-4 pb-6 border-b-2 border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-lg md:text-xl font-bold tracking-widest text-blue-600 uppercase mb-1">
+                  {quiz?.title || 'COLLEGE LIVE QUIZ'}
+                </div>
+                <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
+                  QUESTION {currentQuestion.questionNumber} / {totalQuestions}
+                </h2>
               </div>
-              <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
-                QUESTION {currentQuestion.questionNumber} / {totalQuestions}
-              </h2>
+
+              {/* Huge Timer */}
+              <div
+                className={`font-mono text-5xl md:text-7xl font-extrabold tracking-tight px-6 py-2 rounded-lg border-2 ${
+                  remainingSeconds <= 5
+                    ? 'bg-red-50 text-red-600 border-red-300 animate-pulse'
+                    : 'bg-slate-50 text-slate-900 border-slate-300'
+                }`}
+              >
+                {formatTimer(remainingSeconds)}
+              </div>
             </div>
 
-            {/* Huge Timer */}
-            <div
-              className={`font-mono text-5xl md:text-7xl font-extrabold tracking-tight px-6 py-2 rounded-lg border-2 ${
-                remainingSeconds <= 5
-                  ? 'bg-red-50 text-red-600 border-red-300 animate-pulse'
-                  : 'bg-slate-50 text-slate-900 border-slate-300'
-              }`}
-            >
-              {formatTimer(remainingSeconds)}
+            {/* Huge Visual Timer Bar for Big Screen */}
+            <div className="w-full bg-slate-100 border border-slate-200 rounded-full h-3.5 overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 rounded-full ${
+                  remainingSeconds <= 5
+                    ? 'bg-red-500 animate-pulse'
+                    : remainingSeconds <= 10
+                    ? 'bg-amber-500'
+                    : 'bg-blue-600'
+                }`}
+                style={{
+                  width: `${Math.max(
+                    0,
+                    Math.min(
+                      100,
+                      (remainingSeconds / (quizState?.durationSeconds || currentQuestion.durationSeconds || 30)) * 100
+                    )
+                  )}%`,
+                }}
+              />
             </div>
           </div>
 
