@@ -1,234 +1,245 @@
 import { useState, useEffect } from 'react';
+import { 
+  collection, doc, setDoc, updateDoc, deleteDoc, 
+  onSnapshot, getDocs, query, orderBy, Timestamp 
+} from 'firebase/firestore';
+import { db } from './lib/firebase';
+import { Quiz, Participant, AppView, QuizStatus } from './types';
 import { Navbar } from './components/Navbar';
 import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
-import { ResultsView } from './components/ResultsView';
-import { AuditoriumScreen } from './components/AuditoriumScreen';
 import { StudentRegistration } from './components/StudentRegistration';
 import { StudentWaitingLobby } from './components/StudentWaitingLobby';
 import { StudentInterface } from './components/StudentInterface';
-import { SqlSchemaView } from './components/SqlSchemaView';
-import { QuizEditorModal } from './components/QuizEditorModal';
-import { initialQuizzes, initialParticipants } from './mockData';
-import { Quiz, Participant, AppView } from './types';
-import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { AuditoriumScreen } from './components/AuditoriumScreen';
+import { FirebaseSchemaView } from './components/FirebaseSchemaView';
+
+const SAMPLE_QUIZ: Quiz = {
+  id: 'quiz-college-2026',
+  title: 'Annual College Technical & Computer Science Quiz 2026',
+  description: 'Official assessment covering algorithms, web systems, databases, and computer architecture.',
+  status: 'SCHEDULED',
+  currentQuestionIndex: 0,
+  timerSeconds: 30,
+  totalQuestions: 4,
+  scheduledStartTime: new Date(Date.now() + 10 * 60 * 1000).toISOString().slice(0, 16),
+  createdAt: new Date().toLocaleDateString(),
+  questions: [
+    {
+      id: 'q1',
+      quizId: 'quiz-college-2026',
+      questionNumber: 1,
+      questionText: 'Which data structure uses LIFO (Last In, First Out) ordering?',
+      options: ['Queue', 'Stack', 'Array', 'Binary Tree'],
+      correctOptionIndex: 1, // Stack
+      durationSeconds: 30,
+    },
+    {
+      id: 'q2',
+      quizId: 'quiz-college-2026',
+      questionNumber: 2,
+      questionText: 'What does CSS stand for in web development?',
+      options: ['Computer Style Sheets', 'Cascading Style Sheets', 'Creative Style System', 'Colorful Style Syntax'],
+      correctOptionIndex: 1, // Cascading Style Sheets
+      durationSeconds: 30,
+    },
+    {
+      id: 'q3',
+      quizId: 'quiz-college-2026',
+      questionNumber: 3,
+      questionText: 'Which protocol is secure and encrypted for web browser communication?',
+      options: ['HTTP', 'FTP', 'HTTPS', 'SMTP'],
+      correctOptionIndex: 2, // HTTPS
+      durationSeconds: 30,
+    },
+    {
+      id: 'q4',
+      quizId: 'quiz-college-2026',
+      questionNumber: 4,
+      questionText: 'In relational databases, what does ACID stand for regarding transactions?',
+      options: [
+        'Atomicity, Consistency, Isolation, Durability', 
+        'Access Control In Database', 
+        'Async Core Indexing Design', 
+        'Automated Column Insertion Data'
+      ],
+      correctOptionIndex: 0,
+      durationSeconds: 30,
+    }
+  ]
+};
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<AppView>('admin-login');
+  const [currentView, setCurrentView] = useState<AppView>('student-registration');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
-  const [quizzes, setQuizzes] = useState<Quiz[]>(initialQuizzes);
-  const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
+  const [quizzes, setQuizzes] = useState<Quiz[]>([SAMPLE_QUIZ]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
   const [currentParticipant, setCurrentParticipant] = useState<Participant | null>(null);
-  const [selectedQuizId, setSelectedQuizId] = useState<string>('');
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
 
-  const selectedQuiz = quizzes.find(q => q.id === selectedQuizId) || quizzes[0] || {
-    id: 'default',
-    title: 'No Quiz Available',
-    description: 'Please create a quiz from the Admin Portal.',
-    status: 'Draft',
-    currentQuestionIndex: 0,
-    timerSeconds: 15,
-    totalQuestions: 0,
-    createdAt: new Date().toLocaleDateString(),
-    questions: []
-  };
-
-  // Setup Supabase Realtime channel `quiz_live` and fetch live data
+  // Real-time Firestore sync for quizzes
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return;
-
-    const currentSupabase = supabase;
-
-    // Fetch initial participants from Supabase
-    const fetchParticipants = async () => {
-      const { data, error } = await currentSupabase.from('participants').select('*');
-      if (!error && data && data.length > 0) {
-        const mapped: Participant[] = data.map((row: any) => ({
-          id: row.id,
-          name: row.name,
-          rollNumber: row.roll_number,
-          department: row.department,
-          email: row.email || '',
-          status: row.status || 'IN_PROGRESS',
-          correctCount: row.correct_count || 0,
-          wrongCount: row.wrong_count || 0,
-          unansweredCount: row.unanswered_count || 0,
-          totalScore: row.total_score || 0,
-        }));
-        setParticipants(mapped);
+    const unsubQuizzes = onSnapshot(collection(db, 'quizzes'), (snapshot) => {
+      const qList: Quiz[] = [];
+      snapshot.forEach((docSnap) => {
+        qList.push({ id: docSnap.id, ...docSnap.data() } as Quiz);
+      });
+      if (qList.length > 0) {
+        setQuizzes(qList);
+      } else {
+        // Seed default sample quiz if collection is empty
+        setDoc(doc(db, 'quizzes', SAMPLE_QUIZ.id), SAMPLE_QUIZ).catch(() => {});
+        setQuizzes([SAMPLE_QUIZ]);
       }
-    };
+    }, (error) => {
+      console.warn('Firestore quizzes listener error:', error);
+    });
 
-    fetchParticipants();
-
-    const channel = currentSupabase.channel('quiz_live');
-
-    channel
-      .on('broadcast', { event: 'quiz-update' }, (payload) => {
-        if (payload.payload && (payload.payload as any).quizzes) {
-          setQuizzes((payload.payload as any).quizzes);
-        }
-        if (payload.payload && (payload.payload as any).selectedQuizId) {
-          setSelectedQuizId((payload.payload as any).selectedQuizId);
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, () => {
-        fetchParticipants();
-      })
-      .subscribe();
+    // Real-time Firestore sync for participants
+    const unsubParticipants = onSnapshot(collection(db, 'participants'), (snapshot) => {
+      const pList: Participant[] = [];
+      snapshot.forEach((docSnap) => {
+        pList.push({ id: docSnap.id, ...docSnap.data() } as Participant);
+      });
+      setParticipants(pList);
+    }, (error) => {
+      console.warn('Firestore participants listener error:', error);
+    });
 
     return () => {
-      currentSupabase.removeChannel(channel);
+      unsubQuizzes();
+      unsubParticipants();
     };
   }, []);
 
-  const broadcastQuizState = (updatedQuizzes: Quiz[], quizId: string) => {
-    if (isSupabaseConfigured && supabase) {
-      supabase.channel('quiz_live').send({
-        type: 'broadcast',
-        event: 'quiz-update',
-        payload: { quizzes: updatedQuizzes, selectedQuizId: quizId },
+  const activeQuiz = quizzes[0] || SAMPLE_QUIZ;
+
+  // Quiz Management Operations
+  const handleSaveQuiz = async (quiz: Quiz) => {
+    try {
+      await setDoc(doc(db, 'quizzes', quiz.id), quiz);
+    } catch (err) {
+      console.error('Error saving quiz:', err);
+      // Fallback local update
+      setQuizzes(prev => {
+        const exists = prev.some(q => q.id === quiz.id);
+        if (exists) return prev.map(q => q.id === quiz.id ? quiz : q);
+        return [quiz, ...prev];
       });
     }
   };
 
-  const handleStartQuiz = (quizId: string) => {
-    setSelectedQuizId(quizId);
-    const updated = quizzes.map(q => q.id === quizId ? { ...q, status: 'Active' as const, currentQuestionIndex: 0 } : q);
-    setQuizzes(updated);
-    broadcastQuizState(updated, quizId);
-    setCurrentView('auditorium');
-  };
-
-  const handleDeleteQuiz = (quizId: string) => {
-    const updated = quizzes.filter(q => q.id !== quizId);
-    setQuizzes(updated);
-    if (selectedQuizId === quizId) {
-      setSelectedQuizId(updated[0]?.id || '');
+  const handleDeleteQuiz = async (quizId: string) => {
+    if (quizzes.length <= 1) {
+      alert('You must keep at least one quiz.');
+      return;
     }
-    broadcastQuizState(updated, updated[0]?.id || '');
+    try {
+      await deleteDoc(doc(db, 'quizzes', quizId));
+    } catch (err) {
+      console.error('Error deleting quiz:', err);
+      setQuizzes(prev => prev.filter(q => q.id !== quizId));
+    }
   };
 
-  const handleSaveQuiz = (newQuiz: Quiz) => {
-    const updated = [newQuiz, ...quizzes];
-    setQuizzes(updated);
-    setSelectedQuizId(newQuiz.id);
-    broadcastQuizState(updated, newQuiz.id);
+  const handleUpdateQuizStatus = async (quizId: string, status: QuizStatus, nextIdx?: number) => {
+    const target = quizzes.find(q => q.id === quizId) || activeQuiz;
+    const updated: Quiz = {
+      ...target,
+      status,
+      currentQuestionIndex: typeof nextIdx === 'number' ? nextIdx : target.currentQuestionIndex,
+    };
+
+    try {
+      await updateDoc(doc(db, 'quizzes', quizId), {
+        status,
+        currentQuestionIndex: updated.currentQuestionIndex
+      });
+    } catch (err) {
+      console.error('Error updating quiz status:', err);
+      setQuizzes(prev => prev.map(q => q.id === quizId ? updated : q));
+    }
   };
 
-  const handleRegisterParticipant = (participant: Participant) => {
+  const handleResetQuiz = async (quizId: string) => {
+    await handleUpdateQuizStatus(quizId, 'SCHEDULED', 0);
+  };
+
+  // Student Registration & Answer Recording
+  const handleRegisterParticipant = async (participant: Participant) => {
     setCurrentParticipant(participant);
-    setParticipants(prev => [participant, ...prev]);
-    setCurrentView('student-waiting');
+    try {
+      await setDoc(doc(db, 'participants', participant.id), participant);
+    } catch (err) {
+      console.error('Error registering participant:', err);
+      setParticipants(prev => [...prev.filter(p => p.id !== participant.id), participant]);
+    }
   };
 
   const handleRecordAnswer = async (questionNumber: number, optionIndex: number, isCorrect: boolean) => {
     if (!currentParticipant) return;
 
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('answers').insert([
-          {
-            participant_id: currentParticipant.id,
-            quiz_id: selectedQuiz.id,
-            question_number: questionNumber,
-            selected_option_index: optionIndex,
-            is_correct: isCorrect,
-          }
-        ]);
-      } catch (err) {
-        console.error('Error inserting answer to Supabase:', err);
-      }
+    const updatedParticipant: Participant = {
+      ...currentParticipant,
+      correctCount: currentParticipant.correctCount + (isCorrect ? 1 : 0),
+      wrongCount: currentParticipant.wrongCount + (isCorrect ? 0 : 1),
+      totalScore: currentParticipant.totalScore + (isCorrect ? 1 : 0),
+      status: 'COMPLETED'
+    };
+
+    setCurrentParticipant(updatedParticipant);
+
+    try {
+      await updateDoc(doc(db, 'participants', updatedParticipant.id), {
+        correctCount: updatedParticipant.correctCount,
+        wrongCount: updatedParticipant.wrongCount,
+        totalScore: updatedParticipant.totalScore,
+        status: updatedParticipant.status
+      });
+    } catch (err) {
+      console.error('Error updating participant score:', err);
     }
-
-    setParticipants(prev => prev.map(p => {
-      if (p.id === currentParticipant.id) {
-        const correctCount = p.correctCount + (isCorrect ? 1 : 0);
-        const wrongCount = p.wrongCount + (isCorrect ? 0 : 1);
-        const totalScore = correctCount;
-        const isCompleted = questionNumber >= selectedQuiz.totalQuestions;
-
-        return {
-          ...p,
-          correctCount,
-          wrongCount,
-          totalScore,
-          status: isCompleted ? 'COMPLETED' : 'IN_PROGRESS',
-          completionTime: isCompleted ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '\n' + new Date().toLocaleDateString() : p.completionTime
-        };
-      }
-      return p;
-    }));
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-600 selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-600 selection:text-white">
       <Navbar
         currentView={currentView}
-        onNavigate={(view) => {
-          if (view === 'student-interface' && !currentParticipant) {
-            setCurrentView('student-registration');
-          } else {
-            setCurrentView(view);
-          }
-        }}
+        onNavigate={setCurrentView}
         isAdminLoggedIn={isAdminLoggedIn}
-        onLogout={() => {
-          setIsAdminLoggedIn(false);
-          setCurrentView('admin-login');
-        }}
+        onLogout={() => { setIsAdminLoggedIn(false); setCurrentView('student-registration'); }}
       />
 
       <main>
         {currentView === 'admin-login' && (
           <AdminLogin
             onLoginSuccess={() => setIsAdminLoggedIn(true)}
-            onNavigate={(view) => setCurrentView(view)}
+            onNavigate={setCurrentView}
           />
         )}
 
-        {currentView === 'admin-dashboard' && (
+        {currentView.startsWith('admin') && currentView !== 'admin-login' && (
           <AdminDashboard
             quizzes={quizzes}
             participants={participants}
-            onNavigate={(view) => setCurrentView(view)}
-            onStartQuiz={handleStartQuiz}
+            onNavigate={setCurrentView}
+            onUpdateQuizStatus={handleUpdateQuizStatus}
             onDeleteQuiz={handleDeleteQuiz}
-            onOpenEditor={() => setIsEditorOpen(true)}
-            onViewResults={(quizId) => {
-              setSelectedQuizId(quizId);
-              setCurrentView('admin-results');
-            }}
-          />
-        )}
-
-        {currentView === 'admin-results' && (
-          <ResultsView
-            quiz={selectedQuiz}
-            participants={participants}
-            onBack={() => setCurrentView('admin-dashboard')}
-          />
-        )}
-
-        {currentView === 'auditorium' && (
-          <AuditoriumScreen
-            quiz={selectedQuiz}
-            onBackToAdmin={() => setCurrentView('admin-dashboard')}
+            onSaveQuiz={handleSaveQuiz}
+            onResetQuiz={handleResetQuiz}
           />
         )}
 
         {currentView === 'student-registration' && (
           <StudentRegistration
-            quiz={selectedQuiz}
+            quiz={activeQuiz}
             onRegister={handleRegisterParticipant}
-            onNavigate={(view) => setCurrentView(view)}
+            onNavigate={setCurrentView}
           />
         )}
 
         {currentView === 'student-waiting' && (
           <StudentWaitingLobby
-            quiz={selectedQuiz}
+            quiz={activeQuiz}
             participant={currentParticipant}
             onEnterQuiz={() => setCurrentView('student-interface')}
             onBackToRegistration={() => setCurrentView('student-registration')}
@@ -237,23 +248,25 @@ export default function App() {
 
         {currentView === 'student-interface' && (
           <StudentInterface
-            quiz={selectedQuiz}
+            quiz={activeQuiz}
             participant={currentParticipant}
             onBackToRegistration={() => setCurrentView('student-registration')}
             onRecordAnswer={handleRecordAnswer}
           />
         )}
 
-        {currentView === 'sql-schema' && (
-          <SqlSchemaView />
+        {currentView === 'auditorium' && (
+          <AuditoriumScreen
+            quiz={activeQuiz}
+            participants={participants}
+            onBackToAdmin={() => setCurrentView(isAdminLoggedIn ? 'admin-dashboard' : 'student-registration')}
+          />
+        )}
+
+        {currentView === 'firebase-schema' && (
+          <FirebaseSchemaView />
         )}
       </main>
-
-      <QuizEditorModal
-        isOpen={isEditorOpen}
-        onClose={() => setIsEditorOpen(false)}
-        onSaveQuiz={handleSaveQuiz}
-      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GraduationCap, Lock, Mail, ShieldCheck, ArrowRight } from 'lucide-react';
+import { GraduationCap, Lock, ShieldCheck, ArrowRight, UserCheck } from 'lucide-react';
 import { AppView } from '../types';
 
 interface AdminLoginProps {
@@ -8,72 +8,48 @@ interface AdminLoginProps {
 }
 
 export function AdminLogin({ onLoginSuccess, onNavigate }: AdminLoginProps) {
-  const [email, setEmail] = useState('admin@college.edu');
-  const [password, setPassword] = useState('securepassword2026');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      setError('Please provide valid organizer credentials.');
-      return;
-    }
-    // Secure login check
-    if (email === 'admin@college.edu') {
+    // Simple secure password as requested
+    if (password === 'admin123' || password === 'securepassword2026') {
       onLoginSuccess();
       onNavigate('admin-dashboard');
     } else {
-      setError('Invalid organizer credentials. Use admin@college.edu');
+      setError('Invalid admin password. Default is: admin123');
     }
   };
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center bg-slate-50 px-4 py-12">
-      <div className="w-full max-w-md">
-        {/* Top Icon */}
-        <div className="flex justify-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-sm">
-            <GraduationCap className="w-8 h-8" />
+      <div className="w-full max-w-md space-y-6">
+        
+        {/* Header Icon */}
+        <div className="flex justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-md">
+            <GraduationCap className="w-9 h-9" />
           </div>
         </div>
 
-        {/* Heading */}
-        <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">College Event Quiz</h2>
-          <p className="text-sm text-slate-500 mt-1">Organizer & Automatic Execution Portal</p>
+        <div className="text-center space-y-1">
+          <h2 className="text-2xl font-bold text-slate-950 tracking-tight">Admin Authentication</h2>
+          <p className="text-sm text-slate-500">College Live Quiz Organizer Portal</p>
         </div>
 
         {/* Card */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm p-8">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8 space-y-6">
           {error && (
-            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg">
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                Organizer Email
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <Mail className="w-4 h-4" />
-                </div>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
-                  placeholder="admin@college.edu"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                Admin Password
+                Organizer Password
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -83,37 +59,39 @@ export function AdminLogin({ onLoginSuccess, onNavigate }: AdminLoginProps) {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter admin123"
                   required
-                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
-                  placeholder="••••••••"
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all"
                 />
               </div>
+              <p className="text-[11px] text-slate-400 mt-1.5">Tip: use <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-700">admin123</code></p>
             </div>
 
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-sm transition-colors text-sm"
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-xl shadow-xs transition-colors text-sm cursor-pointer"
             >
-              Sign In as Organizer
+              Sign In to Dashboard
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-slate-100 text-center">
+          <div className="pt-6 border-t border-slate-100 text-center">
             <button
               onClick={() => onNavigate('student-registration')}
-              className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
             >
-              Switch to Student Remote View
+              <UserCheck className="w-3.5 h-3.5" /> Switch to Student Portal
             </button>
           </div>
         </div>
 
-        {/* Security Footer Notice */}
-        <div className="mt-6 flex items-center justify-center gap-1.5 text-xs text-slate-500">
+        {/* Security Footer */}
+        <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
           <ShieldCheck className="w-4 h-4 text-emerald-600" />
           <span>Role-Based Protected Admin Session</span>
         </div>
+
       </div>
     </div>
   );

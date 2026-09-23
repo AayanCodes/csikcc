@@ -1,0 +1,67 @@
+{
+  "entities": {
+    "Quiz": {
+      "title": "Quiz",
+      "description": "Quiz metadata and questions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string" },
+        "currentQuestionIndex": { "type": "number" },
+        "timerSeconds": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "scheduledStartTime": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "status"]
+    },
+    "Participant": {
+      "title": "Participant",
+      "description": "Registered student participant",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "rollNumber": { "type": "string" },
+        "department": { "type": "string" },
+        "email": { "type": "string" },
+        "status": { "type": "string" },
+        "correctCount": { "type": "number" },
+        "wrongCount": { "type": "number" },
+        "totalScore": { "type": "number" }
+      },
+      "required": ["id", "name", "rollNumber", "department", "status"]
+    },
+    "AnswerSubmission": {
+      "title": "AnswerSubmission",
+      "description": "Student answer submission",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participantId": { "type": "string" },
+        "quizId": { "type": "string" },
+        "questionNumber": { "type": "number" },
+        "selectedOptionIndex": { "type": "number" },
+        "isCorrect": { "type": "boolean" },
+        "submittedAt": { "type": "string" }
+      },
+      "required": ["participantId", "quizId", "questionNumber", "selectedOptionIndex", "isCorrect"]
+    }
+  },
+  "firestore": {
+    "/quizzes/{quizId}": {
+      "schema": { "$ref": "#/entities/Quiz" },
+      "description": "Quizzes collection"
+    },
+    "/participants/{participantId}": {
+      "schema": { "$ref": "#/entities/Participant" },
+      "description": "Participants collection"
+    },
+    "/answers/{answerId}": {
+      "schema": { "$ref": "#/entities/AnswerSubmission" },
+      "description": "Answers collection"
+    }
+  }
+}

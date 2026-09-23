@@ -1,10 +1,12 @@
+export type QuizStatus = 'DRAFT' | 'SCHEDULED' | 'LIVE' | 'COMPLETED' | 'RESULTS_PUBLISHED' | 'RESET';
+
 export interface Question {
   id: string;
   quizId: string;
   questionNumber: number;
   questionText: string;
-  options: string[];
-  correctOptionIndex: number; // 0-3 (A-D)
+  options: string[]; // [A, B, C, D]
+  correctOptionIndex: number; // 0-3
   durationSeconds: number;
 }
 
@@ -12,13 +14,13 @@ export interface Quiz {
   id: string;
   title: string;
   description: string;
-  status: 'Draft' | 'Published' | 'Active' | 'Finished';
+  status: QuizStatus;
   currentQuestionIndex: number;
   timerSeconds: number;
   totalQuestions: number;
   questions: Question[];
+  scheduledStartTime: string; // ISO string or datetime-local string
   createdAt: string;
-  scheduledStartTime?: string; // ISO string or datetime string
 }
 
 export interface Participant {
@@ -26,8 +28,8 @@ export interface Participant {
   name: string;
   rollNumber: string;
   department: string;
-  email: string;
-  status: 'IN_PROGRESS' | 'COMPLETED' | 'DISCONNECTED';
+  email?: string;
+  status: 'WAITING' | 'LIVE' | 'COMPLETED';
   correctCount: number;
   wrongCount: number;
   unansweredCount: number;
@@ -49,8 +51,11 @@ export type AppView =
   | 'admin-login'
   | 'admin-dashboard'
   | 'admin-results'
+  | 'admin-analytics'
+  | 'admin-participants'
   | 'auditorium'
   | 'student-registration'
   | 'student-waiting'
   | 'student-interface'
-  | 'sql-schema';
+  | 'student-result'
+  | 'firebase-schema';
