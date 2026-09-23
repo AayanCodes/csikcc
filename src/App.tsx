@@ -421,6 +421,8 @@ export default function App() {
           currentQuestion={currentActiveQuestion}
           totalQuestions={questions.length || activeQuiz?.totalQuestions || 4}
           results={results}
+          participants={participants}
+          answers={answers}
           onExitAuditorium={() => {
             window.location.hash = '';
             setCurrentView('landing');

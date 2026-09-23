@@ -629,13 +629,19 @@ export async function adminPublishResults(
     const batch = writeBatch(db);
     const now = new Date().toISOString();
 
-    // Calculate official scores strictly from actual answers
+    // Calculate official scores strictly from actual answers, falling back to participant scores
+    const effectiveTotalQuestions = totalQuestions > 0 ? totalQuestions : 1;
     const participantStats = participants.map((p) => {
       const pAnswers = answers.filter((a) => a.participantId === p.id);
-      const correct = pAnswers.filter((a) => a.isCorrect).length;
-      const incorrect = pAnswers.filter((a) => !a.isCorrect).length;
+      const hasAnswers = pAnswers.length > 0;
+      const correct = hasAnswers
+        ? pAnswers.filter((a) => a.isCorrect).length
+        : Math.max(p.correct ?? p.score ?? 0, 0);
+      const incorrect = hasAnswers
+        ? pAnswers.filter((a) => !a.isCorrect).length
+        : Math.max(p.incorrect ?? 0, 0);
       const score = correct;
-      const percentage = totalQuestions > 0 ? Math.round((correct / totalQuestions) * 100) : 0;
+      const percentage = Math.round((score / effectiveTotalQuestions) * 100);
 
       return {
         participantId: p.id,
@@ -646,12 +652,16 @@ export async function adminPublishResults(
         percentage,
         correct,
         incorrect,
-        totalQuestions,
+        totalQuestions: effectiveTotalQuestions,
       };
     });
 
-    // Sort descending by score
-    participantStats.sort((a, b) => b.score - a.score);
+    // Sort descending by score, then percentage, then roll number
+    participantStats.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (b.percentage !== a.percentage) return b.percentage - a.percentage;
+      return a.rollNumber.localeCompare(b.rollNumber);
+    });
 
     // Assign rank and write to results collection
     participantStats.forEach((stat, index) => {

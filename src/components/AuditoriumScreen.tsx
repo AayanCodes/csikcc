@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Quiz, Question, QuizState, QuizResult } from '../types';
+import { Quiz, Question, QuizState, QuizResult, Participant, AnswerSubmission } from '../types';
 
 interface AuditoriumScreenProps {
   quiz: Quiz | null;
@@ -7,6 +7,8 @@ interface AuditoriumScreenProps {
   currentQuestion: Question | null;
   totalQuestions: number;
   results: QuizResult[];
+  participants?: Participant[];
+  answers?: AnswerSubmission[];
   onExitAuditorium?: () => void;
 }
 
@@ -16,6 +18,8 @@ export const AuditoriumScreen: React.FC<AuditoriumScreenProps> = ({
   currentQuestion,
   totalQuestions,
   results,
+  participants,
+  answers,
   onExitAuditorium,
 }) => {
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
@@ -64,8 +68,8 @@ export const AuditoriumScreen: React.FC<AuditoriumScreenProps> = ({
       {status === 'WAITING' && (
         <div className="flex-1 flex flex-col items-center justify-center text-center space-y-10 my-auto">
           <div className="space-y-4 max-w-4xl">
-            <span className="text-xl md:text-2xl font-semibold tracking-widest text-blue-600 uppercase">
-              COLLEGE LIVE QUIZ EVENT
+            <span className="text-xl md:text-2xl font-bold tracking-widest text-blue-600 uppercase">
+              CSI Tech Clash 2026
             </span>
             <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-slate-900 leading-tight">
               {quiz?.title || 'College Annual Live Quiz Championship'}
@@ -94,49 +98,25 @@ export const AuditoriumScreen: React.FC<AuditoriumScreenProps> = ({
       {status === 'LIVE' && currentQuestion && (
         <div className="flex-1 flex flex-col justify-between max-w-7xl mx-auto w-full">
           {/* Top Bar: Event Name & Question Number */}
-          <div className="space-y-4 pb-6 border-b-2 border-slate-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-lg md:text-xl font-bold tracking-widest text-blue-600 uppercase mb-1">
-                  {quiz?.title || 'COLLEGE LIVE QUIZ'}
-                </div>
-                <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
-                  QUESTION {currentQuestion.questionNumber} / {totalQuestions}
-                </h2>
+          <div className="flex items-center justify-between pb-8 border-b-2 border-slate-200">
+            <div>
+              <div className="text-lg md:text-xl font-bold tracking-widest text-blue-600 uppercase mb-1">
+                {quiz?.title || 'COLLEGE LIVE QUIZ'}
               </div>
-
-              {/* Huge Timer */}
-              <div
-                className={`font-mono text-5xl md:text-7xl font-extrabold tracking-tight px-6 py-2 rounded-lg border-2 ${
-                  remainingSeconds <= 5
-                    ? 'bg-red-50 text-red-600 border-red-300 animate-pulse'
-                    : 'bg-slate-50 text-slate-900 border-slate-300'
-                }`}
-              >
-                {formatTimer(remainingSeconds)}
-              </div>
+              <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
+                QUESTION {currentQuestion.questionNumber} / {totalQuestions}
+              </h2>
             </div>
 
-            {/* Huge Visual Timer Bar for Big Screen */}
-            <div className="w-full bg-slate-100 border border-slate-200 rounded-full h-3.5 overflow-hidden">
-              <div
-                className={`h-full transition-all duration-300 rounded-full ${
-                  remainingSeconds <= 5
-                    ? 'bg-red-500 animate-pulse'
-                    : remainingSeconds <= 10
-                    ? 'bg-amber-500'
-                    : 'bg-blue-600'
-                }`}
-                style={{
-                  width: `${Math.max(
-                    0,
-                    Math.min(
-                      100,
-                      (remainingSeconds / (quizState?.durationSeconds || currentQuestion.durationSeconds || 30)) * 100
-                    )
-                  )}%`,
-                }}
-              />
+            {/* Huge Timer */}
+            <div
+              className={`font-mono text-5xl md:text-7xl font-extrabold tracking-tight px-6 py-2 rounded-lg border-2 ${
+                remainingSeconds <= 5
+                  ? 'bg-red-50 text-red-600 border-red-300 animate-pulse'
+                  : 'bg-slate-50 text-slate-900 border-slate-300'
+              }`}
+            >
+              {formatTimer(remainingSeconds)}
             </div>
           </div>
 
@@ -200,12 +180,12 @@ export const AuditoriumScreen: React.FC<AuditoriumScreenProps> = ({
 
       {/* STATE 4: RESULTS PUBLISHED (Leaderboard Display) */}
       {status === 'RESULTS_PUBLISHED' && (
-        <div className="flex-1 flex flex-col max-w-7xl mx-auto w-full space-y-8">
-          <div className="text-center space-y-2 pb-6 border-b-2 border-slate-200">
-            <span className="text-lg md:text-xl font-bold tracking-widest text-blue-600 uppercase">
+        <div className="flex-1 flex flex-col max-w-7xl mx-auto w-full space-y-6 md:space-y-8 my-auto">
+          <div className="text-center space-y-2 pb-4 md:pb-6 border-b-2 border-slate-200">
+            <span className="text-base md:text-xl font-bold tracking-widest text-blue-600 uppercase">
               {quiz?.title || 'COLLEGE LIVE QUIZ'}
             </span>
-            <h1 className="text-4xl md:text-6xl font-extrabold text-slate-900">
+            <h1 className="text-3xl md:text-5xl lg:text-6xl font-extrabold text-slate-900">
               OFFICIAL FINAL LEADERBOARD
             </h1>
           </div>
@@ -215,19 +195,19 @@ export const AuditoriumScreen: React.FC<AuditoriumScreenProps> = ({
               No results recorded yet.
             </div>
           ) : (
-            <div className="overflow-hidden border border-slate-300 rounded-xl">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-700 text-lg md:text-xl uppercase tracking-wider border-b border-slate-300">
-                    <th className="py-4 px-6 w-24 text-center">Rank</th>
-                    <th className="py-4 px-6">Participant Name</th>
-                    <th className="py-4 px-6">Roll Number</th>
-                    <th className="py-4 px-6">Department</th>
-                    <th className="py-4 px-6 text-right">Score</th>
-                    <th className="py-4 px-6 text-right">Accuracy</th>
+            <div className="overflow-x-auto overflow-y-auto max-h-[62vh] border border-slate-300 rounded-xl shadow-xs">
+              <table className="w-full text-left border-collapse min-w-[700px]">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-slate-100 text-slate-700 text-sm md:text-base uppercase tracking-wider border-b border-slate-300">
+                    <th className="py-3.5 px-4 md:px-6 w-24 text-center">Rank</th>
+                    <th className="py-3.5 px-4 md:px-6">Participant Name</th>
+                    <th className="py-3.5 px-4 md:px-6">Roll Number</th>
+                    <th className="py-3.5 px-4 md:px-6">Department</th>
+                    <th className="py-3.5 px-4 md:px-6 text-right">Score</th>
+                    <th className="py-3.5 px-4 md:px-6 text-right">Accuracy</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 text-xl md:text-2xl">
+                <tbody className="divide-y divide-slate-200 text-base md:text-xl">
                   {results.slice(0, 10).map((r, idx) => (
                     <tr
                       key={r.id}
@@ -238,19 +218,19 @@ export const AuditoriumScreen: React.FC<AuditoriumScreenProps> = ({
                           ? 'bg-slate-100/70 font-semibold'
                           : idx === 2
                           ? 'bg-orange-50/50 font-semibold'
-                          : 'bg-white'
+                          : 'bg-white hover:bg-slate-50'
                       }
                     >
-                      <td className="py-4 px-6 text-center font-mono font-bold">
+                      <td className="py-3 md:py-4 px-4 md:px-6 text-center font-mono font-bold">
                         {idx === 0 ? '🥇 1' : idx === 1 ? '🥈 2' : idx === 2 ? '🥉 3' : `#${r.rank}`}
                       </td>
-                      <td className="py-4 px-6 text-slate-900 font-bold">{r.name}</td>
-                      <td className="py-4 px-6 text-slate-600 font-mono">{r.rollNumber}</td>
-                      <td className="py-4 px-6 text-slate-600">{r.department}</td>
-                      <td className="py-4 px-6 text-right font-mono font-bold text-blue-600">
+                      <td className="py-3 md:py-4 px-4 md:px-6 text-slate-900 font-bold">{r.name}</td>
+                      <td className="py-3 md:py-4 px-4 md:px-6 text-slate-600 font-mono">{r.rollNumber}</td>
+                      <td className="py-3 md:py-4 px-4 md:px-6 text-slate-600">{r.department}</td>
+                      <td className="py-3 md:py-4 px-4 md:px-6 text-right font-mono font-bold text-blue-600">
                         {r.score} / {r.totalQuestions}
                       </td>
-                      <td className="py-4 px-6 text-right font-mono font-bold text-slate-900">
+                      <td className="py-3 md:py-4 px-4 md:px-6 text-right font-mono font-bold text-slate-900">
                         {r.percentage}%
                       </td>
                     </tr>
@@ -262,11 +242,7 @@ export const AuditoriumScreen: React.FC<AuditoriumScreenProps> = ({
         </div>
       )}
 
-      {/* Bottom subtle event footer */}
-      <footer className="pt-6 border-t border-slate-100 flex items-center justify-between text-sm text-slate-400">
-        <span>COLLEGE AUDITORIUM LIVE DISPLAY SYSTEM</span>
-        <span>SYNCHRONIZED VIA FIRESTORE</span>
-      </footer>
+      {/* Main content rendered above */}
     </div>
   );
 };

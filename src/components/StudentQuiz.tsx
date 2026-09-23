@@ -168,28 +168,26 @@ export const StudentQuiz: React.FC<StudentQuizProps> = ({
           </div>
         )}
 
-        {/* Question Text */}
-        <div className="bg-white border border-slate-200 rounded-lg p-6 sm:p-8 shadow-xs space-y-4">
-          <h2 className="text-xl sm:text-2xl font-medium text-slate-900 leading-relaxed">
-            {currentQuestion.questionText}
+        {/* Anti-Cheating Question Display: Question Number Only */}
+        <div className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-xs text-center space-y-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold tracking-wider uppercase">
+            <span>🖥️</span>
+            <span>Auditorium Synchronized Display</span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+            Question {currentQuestion.questionNumber}
           </h2>
-
-          {currentQuestion.imageUrl && (
-            <div className="relative w-full max-h-72 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center p-2">
-              <img
-                src={currentQuestion.imageUrl}
-                alt="Question illustration"
-                className="max-h-60 w-auto object-contain rounded"
-              />
-            </div>
-          )}
+          <p className="text-sm sm:text-base text-slate-600 font-medium max-w-md mx-auto">
+            Please look at the main auditorium screen to view the question and choices. Select your response below:
+          </p>
         </div>
 
-        {/* 4 Options */}
-        <div className="grid grid-cols-1 gap-3.5">
-          {currentQuestion.options.map((optionText, idx) => {
+        {/* Options to Choose: Option A, B, C, D */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
+          {currentQuestion.options.map((_, idx) => {
             const isThisSelected = selectedOption === idx;
             const disabled = isLocked || isTimerExpired;
+            const label = optionLabels[idx] || String(idx + 1);
 
             return (
               <button
@@ -197,30 +195,49 @@ export const StudentQuiz: React.FC<StudentQuizProps> = ({
                 type="button"
                 onClick={() => handleSelectOption(idx)}
                 disabled={disabled}
-                className={`w-full text-left p-4 sm:p-5 rounded-lg border transition-all flex items-center space-x-4 cursor-pointer disabled:cursor-not-allowed ${
+                className={`w-full text-left p-5 rounded-xl border-2 transition-all flex items-center space-x-4 cursor-pointer disabled:cursor-not-allowed select-none ${
                   isThisSelected
-                    ? 'bg-blue-50 border-blue-600 text-blue-950 font-medium ring-1 ring-blue-600'
+                    ? 'bg-blue-600 border-blue-600 text-white font-medium shadow-md ring-2 ring-blue-400 ring-offset-2'
                     : disabled
-                    ? 'bg-white border-slate-200 text-slate-400 opacity-80'
-                    : 'bg-white border-slate-300 hover:border-slate-400 hover:bg-slate-50/60 text-slate-800'
+                    ? 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
+                    : 'bg-white border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 text-slate-800'
                 }`}
               >
                 <div
-                  className={`w-8 h-8 shrink-0 rounded flex items-center justify-center font-bold text-sm ${
+                  className={`w-12 h-12 shrink-0 rounded-lg flex items-center justify-center font-extrabold text-xl transition-colors ${
                     isThisSelected
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-100 text-slate-700'
+                      ? 'bg-white text-blue-600 shadow-xs'
+                      : disabled
+                      ? 'bg-slate-200 text-slate-500'
+                      : 'bg-blue-50 text-blue-600'
                   }`}
                 >
-                  {optionLabels[idx]}
+                  {label}
                 </div>
-                <span className="text-base sm:text-lg flex-1">
-                  {optionText}
-                </span>
-                {isThisSelected && (
-                  <span className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-1 rounded">
-                    LOCKED
+                <div className="flex-1">
+                  <span
+                    className={`text-lg sm:text-xl font-bold block ${
+                      isThisSelected ? 'text-white' : 'text-slate-900'
+                    }`}
+                  >
+                    Option {label}
                   </span>
+                  <span
+                    className={`text-xs block ${
+                      isThisSelected ? 'text-blue-100' : 'text-slate-500'
+                    }`}
+                  >
+                    {isThisSelected
+                      ? 'Selected & Locked'
+                      : disabled
+                      ? 'Selection Closed'
+                      : `Tap to choose Option ${label}`}
+                  </span>
+                </div>
+                {isThisSelected && (
+                  <div className="shrink-0 px-2.5 py-1 bg-white/20 border border-white/40 text-white rounded-md text-xs font-extrabold tracking-wider">
+                    LOCKED ✓
+                  </div>
                 )}
               </button>
             );
@@ -230,16 +247,19 @@ export const StudentQuiz: React.FC<StudentQuizProps> = ({
         {/* Status notice */}
         <div className="text-center pt-2">
           {isLocked ? (
-            <p className="text-xs font-medium text-slate-500">
-              Answer locked. Waiting for administrator to advance to next question...
-            </p>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-semibold">
+              <span>✓</span>
+              <span>
+                Option {selectedOption !== null ? optionLabels[selectedOption] : ''} locked. Waiting for next question...
+              </span>
+            </div>
           ) : isTimerExpired ? (
             <p className="text-xs font-semibold text-red-600">
-              Time has expired for this question. Options disabled.
+              Time has expired for Question {currentQuestion.questionNumber}. Options disabled.
             </p>
           ) : (
-            <p className="text-xs text-slate-400">
-              Click an option to submit and lock your answer.
+            <p className="text-xs text-slate-500">
+              Tap Option A, B, C, or D to submit and lock your choice for Question {currentQuestion.questionNumber}.
             </p>
           )}
         </div>

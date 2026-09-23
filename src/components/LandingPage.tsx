@@ -14,32 +14,9 @@ interface LandingPageProps {
 export const LandingPage: React.FC<LandingPageProps> = ({
   quizzes,
   activeQuiz,
-  onSelectQuiz,
   onJoinQuiz,
   onOpenAdmin,
-  onOpenAuditorium,
 }) => {
-  const [eventCodeInput, setEventCodeInput] = useState('');
-  const [codeError, setCodeError] = useState<string | null>(null);
-
-  const handleJoinByCode = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanCode = eventCodeInput.trim().toLowerCase();
-    if (!cleanCode) return;
-
-    const matched = quizzes.find(
-      (q) => q.id.toLowerCase() === cleanCode || q.title.toLowerCase().includes(cleanCode)
-    );
-
-    if (matched) {
-      setCodeError(null);
-      onSelectQuiz(matched.id);
-      onJoinQuiz(matched.id);
-    } else {
-      setCodeError(`No event found matching code "${cleanCode}". Please verify your event code or link.`);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col justify-between selection:bg-blue-600 selection:text-white">
       {/* Top minimal header */}
@@ -99,50 +76,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <span>Join Active Event Now</span>
             </button>
           </div>
-
-          {/* Quick Event Code Search */}
-          <form onSubmit={handleJoinByCode} className="max-w-md mx-auto pt-4 space-y-2">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={eventCodeInput}
-                onChange={(e) => {
-                  setEventCodeInput(e.target.value);
-                  setCodeError(null);
-                }}
-                placeholder="Have an Event Code? e.g. college-live-quiz-2026"
-                className="flex-1 px-3.5 py-2 text-xs border border-slate-300 rounded font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                type="submit"
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded cursor-pointer shrink-0"
-              >
-                Join by Code →
-              </button>
-            </div>
-            {codeError && (
-              <p className="text-xs text-red-600 text-left">{codeError}</p>
-            )}
-          </form>
         </div>
       </main>
-
-      {/* Footer */}
-      <footer className="px-6 py-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 max-w-6xl mx-auto w-full">
-        <div>
-          CSI Tech Clash • Real-Time Synchronized Competition Assessment Engine
-        </div>
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={onOpenAdmin}
-            className="text-slate-500 hover:text-slate-900 font-semibold transition-colors cursor-pointer flex items-center gap-1"
-            title="Administrator Portal"
-          >
-            <span>🛡️</span>
-            <span>Admin Portal</span>
-          </button>
-        </div>
-      </footer>
     </div>
   );
 };

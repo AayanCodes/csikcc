@@ -57,7 +57,7 @@ export const StudentWaitingLobby: React.FC<StudentWaitingLobbyProps> = ({
         {/* Quiz Event Name */}
         <div className="space-y-2">
           <span className="text-xs font-semibold tracking-widest text-blue-600 uppercase">
-            Official Examination
+            CSI Tech Clash 2026
           </span>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
             {quiz?.title || 'College Live Quiz'}
