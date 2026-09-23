@@ -4,11 +4,13 @@ import { Quiz, Participant } from '../types';
 interface StudentWaitingLobbyProps {
   quiz: Quiz | null;
   participant: Participant | null;
+  onSignOut?: () => void;
 }
 
 export const StudentWaitingLobby: React.FC<StudentWaitingLobbyProps> = ({
   quiz,
   participant,
+  onSignOut,
 }) => {
   const [scheduledCountdown, setScheduledCountdown] = useState<string>('');
 
@@ -106,6 +108,18 @@ export const StudentWaitingLobby: React.FC<StudentWaitingLobbyProps> = ({
             </p>
           )}
         </div>
+
+        {onSignOut && (
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-center">
+            <button
+              onClick={onSignOut}
+              className="text-xs text-slate-500 hover:text-slate-800 transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <span>←</span>
+              <span>Sign Out & Return to Front Page</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

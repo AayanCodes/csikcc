@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import logoImg from '../logo.jpeg';
 
 interface AdminLoginProps {
   onLoginSuccess: () => void;
@@ -40,9 +41,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
           >
             ← Return to Landing Page
           </button>
-          <div className="w-10 h-10 mx-auto rounded bg-slate-900 text-white flex items-center justify-center font-bold text-sm">
-            ADM
-          </div>
+          <img
+            src={logoImg}
+            alt="College Quiz Logo"
+            className="w-12 h-12 mx-auto rounded object-cover shadow-2xs border border-slate-200"
+          />
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">
             Administrator Portal
           </h2>
@@ -85,10 +88,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
             {loading ? 'Authenticating...' : 'Sign In as Admin'}
           </button>
         </form>
-
-        <div className="pt-2 text-center text-xs text-slate-400">
-          Passcode hint: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-600">admin2026</code>
-        </div>
       </div>
     </div>
   );

@@ -62,6 +62,8 @@ export default function App() {
         setCurrentView(isAuth ? 'admin-dashboard' : 'admin-login');
       } else if (hash.includes('register') || path.includes('register')) {
         setCurrentView('student-registration');
+      } else if (!hash || hash === '#' || hash === '#/' || hash === '#index' || hash === '#home') {
+        setCurrentView('landing');
       }
     };
 
@@ -228,6 +230,11 @@ export default function App() {
 
     const status = quizState?.status;
 
+    // Only switch automatically if user is actively engaged as a student in a quiz session
+    if (currentView === 'landing' || currentView === 'student-registration') {
+      return;
+    }
+
     if (status === 'LIVE') {
       if (currentView !== 'student-quiz') {
         setCurrentView('student-quiz');
@@ -306,6 +313,11 @@ export default function App() {
       {currentView === 'student-registration' && (
         <StudentRegistration
           quiz={activeQuiz}
+          isAdmin={isAdminAuthenticated}
+          onReturnToAdmin={() => {
+            window.location.hash = 'admin';
+            setCurrentView('admin-dashboard');
+          }}
           onRegistered={handleStudentRegistered}
           onBackToHome={() => {
             window.location.hash = '';
@@ -319,6 +331,14 @@ export default function App() {
         <StudentWaitingLobby
           quiz={activeQuiz}
           participant={currentParticipant}
+          onSignOut={() => {
+            sessionStorage.removeItem('cq_current_participant');
+            setCurrentParticipant(null);
+            setStudentAnswers([]);
+            setStudentResult(null);
+            window.location.hash = '';
+            setCurrentView('landing');
+          }}
         />
       )}
 
@@ -340,6 +360,10 @@ export default function App() {
           result={studentResult}
           quizTitle={activeQuiz?.title || 'College Live Quiz'}
           onBackToHome={() => {
+            sessionStorage.removeItem('cq_current_participant');
+            setCurrentParticipant(null);
+            setStudentAnswers([]);
+            setStudentResult(null);
             window.location.hash = '';
             setCurrentView('landing');
           }}
@@ -387,12 +411,21 @@ export default function App() {
           onLogout={() => {
             localStorage.removeItem('cq_admin_authenticated');
             setIsAdminAuthenticated(false);
-            window.location.hash = '';
+            if (window.location.hash) {
+              window.location.hash = '';
+            }
+            if (window.history && window.history.pushState) {
+              window.history.pushState(null, '', window.location.pathname);
+            }
             setCurrentView('landing');
           }}
           onOpenAuditorium={() => {
             window.location.hash = 'auditorium';
             setCurrentView('auditorium');
+          }}
+          onOpenStudentLogin={() => {
+            window.location.hash = 'register';
+            setCurrentView('student-registration');
           }}
         />
       )}

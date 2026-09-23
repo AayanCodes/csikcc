@@ -1,5 +1,6 @@
 import React from 'react';
 import { Quiz } from '../types';
+import logoImg from '../logo.jpeg';
 
 interface LandingPageProps {
   quiz: Quiz | null;
@@ -19,21 +20,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       {/* Top minimal header */}
       <header className="px-6 py-5 border-b border-slate-100 flex items-center justify-between max-w-6xl mx-auto w-full">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded bg-blue-600 flex items-center justify-center text-white font-semibold text-sm">
-            CQ
-          </div>
+          <img
+            src={logoImg}
+            alt="Logo"
+            className="w-9 h-9 rounded object-cover shadow-2xs border border-slate-200"
+          />
           <span className="font-semibold text-slate-800 tracking-tight text-lg">
-            College Live Quiz
+            CSI Tech Clash
           </span>
-        </div>
-
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={onOpenAuditorium}
-            className="text-xs font-medium text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded border border-slate-200 hover:border-slate-300 transition-colors"
-          >
-            Auditorium Projector
-          </button>
         </div>
       </header>
 

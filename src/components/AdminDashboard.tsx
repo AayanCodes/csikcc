@@ -20,6 +20,7 @@ import {
 import { AdminQuestionModal } from './AdminQuizEditorModal';
 import { AdminQRCodeModal } from './AdminQRCodeModal';
 import { testFirestoreConnection, FIREBASE_CONFIG, FIRESTORE_DATABASE_ID } from '../lib/firebase';
+import logoImg from '../logo.jpeg';
 
 interface AdminDashboardProps {
   quiz: Quiz;
@@ -30,6 +31,7 @@ interface AdminDashboardProps {
   results: QuizResult[];
   onLogout: () => void;
   onOpenAuditorium: () => void;
+  onOpenStudentLogin: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -41,6 +43,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   results,
   onLogout,
   onOpenAuditorium,
+  onOpenStudentLogin,
 }) => {
   const [activeTab, setActiveTab] = useState<
     'control' | 'questions' | 'participants' | 'results' | 'env'
@@ -49,8 +52,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isQuestionModalOpen, setIsQuestionModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  const [showStudentPreviewModal, setShowStudentPreviewModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   // Connection test state
   const [connTestStatus, setConnTestStatus] = useState<string | null>(null);
@@ -70,78 +81,146 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const showFeedback = (msg: string) => {
     setActionFeedback(msg);
-    setTimeout(() => setActionFeedback(null), 3500);
+    setActionError(null);
+    setTimeout(() => setActionFeedback(null), 4000);
   };
 
-  // Live Controls
+  const handleSeedDefaultQuestions = async () => {
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const defaults = [
+        {
+          id: `${quiz.id}_q1`,
+          quizId: quiz.id,
+          questionNumber: 1,
+          questionText: 'Which protocol is used for encrypted, secure web communications over SSL/TLS?',
+          options: ['HTTP', 'FTP', 'HTTPS', 'SMTP'],
+          correctOptionIndex: 2,
+          durationSeconds: 30,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: `${quiz.id}_q2`,
+          quizId: quiz.id,
+          questionNumber: 2,
+          questionText: 'Which data structure strictly operates on a Last-In, First-Out (LIFO) order?',
+          options: ['Queue', 'Stack', 'Array', 'Binary Search Tree'],
+          correctOptionIndex: 1,
+          durationSeconds: 30,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: `${quiz.id}_q3`,
+          quizId: quiz.id,
+          questionNumber: 3,
+          questionText: 'In database management systems, what does the "A" in the ACID guarantee represent?',
+          options: ['Atomicity', 'Access Control', 'Authentication', 'Asynchronous'],
+          correctOptionIndex: 0,
+          durationSeconds: 30,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: `${quiz.id}_q4`,
+          quizId: quiz.id,
+          questionNumber: 4,
+          questionText: 'What is the average case time complexity of searching a balanced Binary Search Tree (BST)?',
+          options: ['O(n)', 'O(n log n)', 'O(log n)', 'O(1)'],
+          correctOptionIndex: 2,
+          durationSeconds: 30,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      for (const q of defaults) {
+        await adminSaveQuestion(q);
+      }
+      showFeedback('4 championship questions seeded successfully!');
+    } catch (err) {
+      setActionError('Failed to seed default questions: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Live Controls (Authoritative)
   const handleStart = async () => {
+    setActionError(null);
     if (questions.length === 0) {
-      alert('Please add at least one question before starting.');
+      setActionError('Cannot start quiz: No questions configured. Click "Seed 4 Default Questions" below or add questions in the Questions tab.');
       return;
     }
+    const sortedQuestions = [...questions].sort((a, b) => a.questionNumber - b.questionNumber);
+    const firstQ = sortedQuestions[0];
     setActionLoading(true);
     try {
-      await adminStartQuiz(quiz.id, questions[0]);
+      await adminStartQuiz(quiz.id, firstQ);
       showFeedback('Quiz started! Question 1 is now LIVE across all student and auditorium screens.');
     } catch (err) {
-      alert('Failed to start quiz: ' + (err instanceof Error ? err.message : String(err)));
+      console.error('Failed to start quiz:', err);
+      setActionError('Failed to start quiz: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleNext = async () => {
+    setActionError(null);
     const nextQNum = currentQNum + 1;
     const nextQ = questions.find((q) => q.questionNumber === nextQNum);
     if (!nextQ) {
-      alert('No next question found.');
+      setActionError(`No question found for Question #${nextQNum}.`);
       return;
     }
     setActionLoading(true);
     try {
       await adminNextQuestion(quiz.id, nextQ);
-      showFeedback(`Advanced to Question ${nextQNum} across all clients.`);
+      showFeedback(`Advanced to Question #${nextQNum} across all connected student and auditorium screens.`);
     } catch (err) {
-      alert('Failed to advance question: ' + (err instanceof Error ? err.message : String(err)));
+      console.error('Failed to advance question:', err);
+      setActionError('Failed to advance question: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleEnd = async () => {
-    if (!confirm('End the live quiz? Students will no longer be able to submit answers.')) return;
+    setActionError(null);
     setActionLoading(true);
     try {
       await adminEndQuiz(quiz.id);
-      showFeedback('Quiz ended. Ready to publish results.');
+      showFeedback('Quiz ended. Answering is locked for all participants. Ready to publish results.');
     } catch (err) {
-      alert('Failed to end quiz: ' + (err instanceof Error ? err.message : String(err)));
+      console.error('Failed to end quiz:', err);
+      setActionError('Failed to end quiz: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handlePublish = async () => {
-    if (!confirm('Publish official results calculated strictly from submitted answers?')) return;
+    setActionError(null);
     setActionLoading(true);
     try {
-      await adminPublishResults(quiz.id, participants, answers, questions.length);
-      showFeedback('Official results published! Students can now view their scores.');
+      await adminPublishResults(quiz.id, participants, answers, questions.length || quiz.totalQuestions);
+      showFeedback('Official results published! Students and auditorium display are now viewing final ranks.');
     } catch (err) {
-      alert('Failed to publish results: ' + (err instanceof Error ? err.message : String(err)));
+      console.error('Failed to publish results:', err);
+      setActionError('Failed to publish results: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleReset = async () => {
-    if (!confirm('Reset quiz session back to Waiting Lobby? (Participants will remain in lobby)')) return;
+    setActionError(null);
     setActionLoading(true);
     try {
-      await adminResetQuiz(quiz.id, questions[0]?.id);
-      showFeedback('Quiz session reset to WAITING status.');
+      const sortedQuestions = [...questions].sort((a, b) => a.questionNumber - b.questionNumber);
+      await adminResetQuiz(quiz.id, sortedQuestions[0]?.id);
+      showFeedback('Quiz session reset to WAITING lobby status. Students remain in waiting lobby.');
     } catch (err) {
-      alert('Failed to reset quiz: ' + (err instanceof Error ? err.message : String(err)));
+      console.error('Failed to reset quiz:', err);
+      setActionError('Failed to reset quiz: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setActionLoading(false);
     }
@@ -150,6 +229,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveQuizDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingDetails(true);
+    setActionError(null);
     try {
       await adminSaveQuiz({
         ...quiz,
@@ -162,7 +242,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
       showFeedback('Quiz event details updated successfully.');
     } catch (err) {
-      alert('Failed to update details: ' + (err instanceof Error ? err.message : String(err)));
+      setActionError('Failed to update details: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsSavingDetails(false);
     }
@@ -186,9 +266,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-30 shadow-2xs">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded bg-slate-900 text-white font-bold text-xs flex items-center justify-center">
-              ADM
-            </div>
+            <img
+              src={logoImg}
+              alt="College Quiz Logo"
+              className="w-9 h-9 rounded object-cover shadow-2xs border border-slate-200"
+            />
             <div>
               <h1 className="text-base font-bold text-slate-900 leading-none">
                 Exam Controller Dashboard
@@ -204,6 +286,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           <div className="flex items-center space-x-2">
             <button
+              onClick={onOpenStudentLogin}
+              className="text-xs font-semibold px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              title="Open Student Registration and Login Screen"
+            >
+              <span>👤</span>
+              <span>Show Student Login Page</span>
+            </button>
+            <button
               onClick={() => setIsQRModalOpen(true)}
               className="text-xs font-medium px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 rounded text-slate-700 transition-colors cursor-pointer"
             >
@@ -217,9 +307,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </button>
             <button
               onClick={onLogout}
-              className="text-xs font-medium px-3 py-1.5 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              className="text-xs font-medium px-3 py-1.5 text-slate-600 hover:text-red-700 hover:bg-red-50 rounded border border-transparent hover:border-red-200 transition-colors cursor-pointer flex items-center gap-1.5"
+              title="Sign Out and return to Front Page"
             >
-              Sign Out
+              <span>🚪</span>
+              <span>Sign Out</span>
             </button>
           </div>
         </div>
@@ -230,9 +322,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Feedback Alert */}
         {actionFeedback && (
           <div className="p-3 text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded flex items-center justify-between">
-            <span>{actionFeedback}</span>
+            <div className="flex items-center gap-2">
+              <span>✅</span>
+              <span>{actionFeedback}</span>
+            </div>
             <button
               onClick={() => setActionFeedback(null)}
+              className="text-xs font-semibold cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Action Error Alert */}
+        {actionError && (
+          <div className="p-3 text-sm text-red-800 bg-red-50 border border-red-200 rounded flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span>⚠️</span>
+              <span>{actionError}</span>
+            </div>
+            <button
+              onClick={() => setActionError(null)}
               className="text-xs font-semibold cursor-pointer"
             >
               ✕
@@ -297,6 +408,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* TAB 1: LIVE CONTROL */}
         {activeTab === 'control' && (
           <div className="space-y-6">
+            {/* Student Access & Login Portal Highlight Card */}
+            <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-slate-50 border border-blue-200 rounded-lg p-5 shadow-2xs">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-blue-900">🎓 Student Login & Registration Screen</span>
+                    <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 font-semibold rounded">
+                      Direct Student Access
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 max-w-xl">
+                    Students log in with their Name, Roll Number, and Department. Real-time synchronized with this Exam Controller. You can display the student portal on screen, preview it, or share the direct link.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={onOpenStudentLogin}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>👤</span>
+                    <span>Show Student Login Page</span>
+                  </button>
+                  <button
+                    onClick={() => setShowStudentPreviewModal(true)}
+                    className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs rounded border border-slate-300 transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>👁️</span>
+                    <span>Preview in Modal</span>
+                  </button>
+                  <button
+                    onClick={() => setIsQRModalOpen(true)}
+                    className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs rounded border border-slate-300 transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>📱</span>
+                    <span>QR Code & Link</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* Live Status Overview Card */}
             <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-xs space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
@@ -362,17 +513,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               {/* Authoritative Live Action Controls */}
               <div className="pt-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-700 mb-3">
-                  Authoritative Session Controls (Updates all students and auditorium simultaneously)
-                </h4>
-                <div className="flex flex-wrap gap-3">
-                  {currentStatus === 'WAITING' && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-700">
+                    Authoritative Session Controls (Updates all students and auditorium simultaneously)
+                  </h4>
+                  {actionLoading && (
+                    <span className="text-xs font-medium text-blue-600 animate-pulse flex items-center gap-1">
+                      <span className="inline-block w-2 h-2 rounded-full bg-blue-600"></span>
+                      Updating session across all connected clients...
+                    </span>
+                  )}
+                </div>
+
+                {/* Inline Confirmation Card for Destructive Actions (Replaces blocked window.confirm) */}
+                {confirmModal && (
+                  <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-300 rounded-lg space-y-3">
+                    <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+                      <span>⚠️</span>
+                      <span>{confirmModal.title}</span>
+                    </div>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      {confirmModal.message}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={confirmModal.onConfirm}
+                        disabled={actionLoading}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded shadow-xs transition-colors cursor-pointer"
+                      >
+                        {confirmModal.confirmLabel || 'Yes, Confirm & Proceed'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmModal(null)}
+                        disabled={actionLoading}
+                        className="px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-medium rounded transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Question Count Alert if 0 questions */}
+                {questions.length === 0 && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-xs text-red-800 flex items-center justify-between">
+                    <div>
+                      <strong>No questions loaded for this quiz.</strong> Please add questions or click the button below to seed 4 standard championship questions.
+                    </div>
+                    <button
+                      onClick={handleSeedDefaultQuestions}
+                      disabled={actionLoading}
+                      className="ml-3 px-3 py-1 bg-red-600 hover:bg-red-700 text-white font-semibold rounded text-xs transition-colors cursor-pointer shrink-0"
+                    >
+                      + Seed 4 Default Questions
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {(currentStatus === 'WAITING' || currentStatus === 'RESET') && (
                     <button
                       onClick={handleStart}
-                      disabled={actionLoading}
-                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                      disabled={actionLoading || questions.length === 0}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded shadow-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                     >
-                      ▶ START QUIZ (QUESTION 1)
+                      <span>▶</span>
+                      <span>START QUIZ (QUESTION 1)</span>
                     </button>
                   )}
 
@@ -382,22 +588,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <button
                           onClick={handleNext}
                           disabled={actionLoading}
-                          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded shadow-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                         >
-                          NEXT QUESTION → ({currentQNum + 1})
+                          <span>NEXT QUESTION →</span>
+                          <span>(Question {currentQNum + 1})</span>
                         </button>
                       ) : (
                         <button
-                          onClick={handleEnd}
+                          onClick={() => {
+                            setConfirmModal({
+                              title: 'End Live Quiz?',
+                              message: 'This is the final question. Ending the quiz will lock answer submissions for all students.',
+                              confirmLabel: 'End Live Quiz',
+                              onConfirm: () => {
+                                setConfirmModal(null);
+                                handleEnd();
+                              },
+                            });
+                          }}
                           disabled={actionLoading}
-                          className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs rounded shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                          className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
                         >
                           END QUIZ (LAST QUESTION FINISHED)
                         </button>
                       )}
 
                       <button
-                        onClick={handleEnd}
+                        onClick={() => {
+                          setConfirmModal({
+                            title: 'End Quiz Early?',
+                            message: 'Are you sure you want to end the live quiz early? All connected student answer submissions will be closed.',
+                            confirmLabel: 'Yes, End Early',
+                            onConfirm: () => {
+                              setConfirmModal(null);
+                              handleEnd();
+                            },
+                          });
+                        }}
                         disabled={actionLoading}
                         className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded border border-slate-300 transition-colors cursor-pointer"
                       >
@@ -408,20 +635,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   {(currentStatus === 'ENDED' || currentStatus === 'LIVE') && (
                     <button
-                      onClick={handlePublish}
+                      onClick={() => {
+                        setConfirmModal({
+                          title: 'Publish Official Results?',
+                          message: 'This will compute final ranks strictly based on submitted student answers and broadcast results to all students and the auditorium podium.',
+                          confirmLabel: 'Publish Results Now',
+                          onConfirm: () => {
+                            setConfirmModal(null);
+                            handlePublish();
+                          },
+                        });
+                      }}
                       disabled={actionLoading}
-                      className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs rounded shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                      className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded shadow-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                     >
-                      PUBLISH OFFICIAL RESULTS
+                      <span>🏆</span>
+                      <span>PUBLISH OFFICIAL RESULTS</span>
                     </button>
                   )}
 
+                  {currentStatus === 'RESULTS_PUBLISHED' && (
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-2 bg-purple-50 border border-purple-200 text-purple-800 text-xs font-semibold rounded">
+                        ✓ Official Results Published Live
+                      </span>
+                      <button
+                        onClick={() => {
+                          setConfirmModal({
+                            title: 'Re-compute & Re-publish Results?',
+                            message: 'This will re-calculate ranks from all submitted answers and update student screens.',
+                            confirmLabel: 'Re-publish Results',
+                            onConfirm: () => {
+                              setConfirmModal(null);
+                              handlePublish();
+                            },
+                          });
+                        }}
+                        disabled={actionLoading}
+                        className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        Re-publish Results
+                      </button>
+                    </div>
+                  )}
+
                   <button
-                    onClick={handleReset}
+                    onClick={() => {
+                      setConfirmModal({
+                        title: 'Reset Session to WAITING Lobby?',
+                        message: 'This resets the live state back to WAITING. Participants will remain registered in the lobby, ready for Question 1.',
+                        confirmLabel: 'Yes, Reset Session',
+                        onConfirm: () => {
+                          setConfirmModal(null);
+                          handleReset();
+                        },
+                      });
+                    }}
                     disabled={actionLoading}
-                    className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-600 font-medium text-xs rounded border border-slate-300 transition-colors cursor-pointer"
+                    className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 font-medium text-xs rounded border border-slate-300 transition-colors cursor-pointer flex items-center gap-1"
                   >
-                    Reset Session
+                    <span>🔄</span>
+                    <span>Reset Session to WAITING</span>
                   </button>
                 </div>
               </div>
@@ -543,11 +817,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           Edit
                         </button>
                         <button
-                          onClick={async () => {
-                            if (confirm(`Delete Question #${q.questionNumber}?`)) {
-                              await adminDeleteQuestion(q.id);
-                              showFeedback(`Question #${q.questionNumber} deleted.`);
-                            }
+                          onClick={() => {
+                            setConfirmModal({
+                              title: `Delete Question #${q.questionNumber}?`,
+                              message: `Are you sure you want to delete Question #${q.questionNumber}: "${q.questionText}"?`,
+                              confirmLabel: 'Delete Question',
+                              onConfirm: async () => {
+                                setConfirmModal(null);
+                                try {
+                                  await adminDeleteQuestion(q.id);
+                                  showFeedback(`Question #${q.questionNumber} deleted.`);
+                                } catch (err) {
+                                  setActionError('Failed to delete question: ' + (err instanceof Error ? err.message : String(err)));
+                                }
+                              },
+                            });
                           }}
                           className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 border border-red-200 rounded cursor-pointer"
                         >
@@ -804,6 +1088,83 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onClose={() => setIsQRModalOpen(false)}
         defaultUrl={`${window.location.origin}/#register`}
       />
+
+      {/* Student Login Live Preview Modal */}
+      {showStudentPreviewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-150">
+            <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🎓</span>
+                <span className="font-bold text-sm">Student Registration & Login Screen Preview</span>
+              </div>
+              <button
+                onClick={() => setShowStudentPreviewModal(false)}
+                className="text-slate-400 hover:text-white text-base cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6 bg-slate-50 space-y-4">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900 flex items-center justify-between">
+                <span>This preview demonstrates what students see on their mobile phones and laptops when registering.</span>
+                <button
+                  onClick={() => {
+                    setShowStudentPreviewModal(false);
+                    onOpenStudentLogin();
+                  }}
+                  className="font-bold text-blue-700 hover:text-blue-900 underline text-xs cursor-pointer ml-2 shrink-0"
+                >
+                  Open Full Screen →
+                </button>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-xs space-y-4 pointer-events-none opacity-90">
+                <div className="text-center space-y-1">
+                  <h3 className="text-lg font-bold text-slate-900">Student Registration</h3>
+                  <p className="text-xs text-slate-500">{quiz.title}</p>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">Full Name</label>
+                    <input type="text" placeholder="e.g. Alex Johnson" disabled className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded text-xs" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">Roll Number</label>
+                    <input type="text" placeholder="e.g. CS2026-084" disabled className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded text-xs" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-700 mb-1">Department</label>
+                    <input type="text" placeholder="e.g. Computer Science" disabled className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded text-xs" />
+                  </div>
+                  <button disabled className="w-full py-2.5 bg-blue-600 text-white font-bold text-xs rounded opacity-80">
+                    Register & Enter Waiting Lobby
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setShowStudentPreviewModal(false)}
+                  className="px-4 py-2 bg-white border border-slate-300 text-slate-700 text-xs font-medium rounded hover:bg-slate-50 cursor-pointer"
+                >
+                  Close Preview
+                </button>
+                <button
+                  onClick={() => {
+                    setShowStudentPreviewModal(false);
+                    onOpenStudentLogin();
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded shadow-xs cursor-pointer flex items-center gap-1"
+                >
+                  <span>Switch to Student Login Page</span>
+                  <span>→</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

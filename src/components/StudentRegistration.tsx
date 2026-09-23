@@ -6,12 +6,16 @@ interface StudentRegistrationProps {
   quiz: Quiz | null;
   onRegistered: (participant: Participant) => void;
   onBackToHome: () => void;
+  isAdmin?: boolean;
+  onReturnToAdmin?: () => void;
 }
 
 export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
   quiz,
   onRegistered,
   onBackToHome,
+  isAdmin,
+  onReturnToAdmin,
 }) => {
   const [fullName, setFullName] = useState('');
   const [rollNumber, setRollNumber] = useState('');
@@ -65,13 +69,38 @@ export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-center items-center px-4 py-12">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-lg shadow-sm p-8 space-y-6">
+        {isAdmin && onReturnToAdmin && (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-900 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 font-medium">
+              <span>🛡️</span>
+              <span>Admin Preview Mode</span>
+            </div>
+            <button
+              onClick={onReturnToAdmin}
+              className="text-xs font-semibold px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors cursor-pointer"
+            >
+              Back to Dashboard →
+            </button>
+          </div>
+        )}
+
         <div className="text-center space-y-2">
-          <button
-            onClick={onBackToHome}
-            className="text-xs text-slate-500 hover:text-slate-800 transition-colors mb-2 inline-block cursor-pointer"
-          >
-            ← Back to Home
-          </button>
+          <div className="flex items-center justify-center gap-4 mb-2">
+            <button
+              onClick={onBackToHome}
+              className="text-xs text-slate-500 hover:text-slate-800 transition-colors inline-block cursor-pointer"
+            >
+              ← Back to Home
+            </button>
+            {onReturnToAdmin && (
+              <button
+                onClick={onReturnToAdmin}
+                className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors inline-block cursor-pointer"
+              >
+                🛡️ Back to Admin
+              </button>
+            )}
+          </div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">
             Student Registration
           </h2>
@@ -92,7 +121,7 @@ export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
               htmlFor="fullName"
               className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1"
             >
-              Full Name
+              Team Name
             </label>
             <input
               id="fullName"
@@ -101,7 +130,7 @@ export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
               autoFocus
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="e.g. Alex Johnson"
+              placeholder="e.g. Cyber Knights"
               className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
               disabled={isSubmitting}
             />
@@ -112,7 +141,7 @@ export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
               htmlFor="rollNumber"
               className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1"
             >
-              Roll Number
+              Team Leader Roll No.
             </label>
             <input
               id="rollNumber"
@@ -131,7 +160,7 @@ export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
               htmlFor="department"
               className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1"
             >
-              Department
+              Branch/Section
             </label>
             <input
               id="department"
@@ -139,7 +168,7 @@ export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
               required
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
-              placeholder="e.g. Computer Science & Engineering"
+              placeholder="e.g. CSE-A / IT"
               className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
               disabled={isSubmitting}
             />
