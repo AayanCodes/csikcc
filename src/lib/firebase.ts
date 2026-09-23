@@ -10,18 +10,35 @@ import {
 import { getAuth } from 'firebase/auth';
 import firebaseConfigFromJson from '../../firebase-applet-config.json';
 
-// Read Firebase configuration from VITE_* environment variables, with fallback to firebase-applet-config.json
+// Read authoritative Firebase configuration from firebase-applet-config.json
 export const FIREBASE_CONFIG = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigFromJson.apiKey || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigFromJson.authDomain || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfigFromJson.projectId || 'rock-dahlia-c98sv',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigFromJson.storageBucket || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigFromJson.messagingSenderId || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigFromJson.appId || '',
+  apiKey:
+    firebaseConfigFromJson.apiKey ||
+    (import.meta.env.VITE_FIREBASE_API_KEY as string) ||
+    'AIzaSyDArT_yblKeybANZWO9PBEfqWySCtVAAms',
+  authDomain:
+    firebaseConfigFromJson.authDomain ||
+    (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string) ||
+    'rock-dahlia-c98sv.firebaseapp.com',
+  projectId:
+    firebaseConfigFromJson.projectId ||
+    (import.meta.env.VITE_FIREBASE_PROJECT_ID as string) ||
+    'rock-dahlia-c98sv',
+  storageBucket:
+    firebaseConfigFromJson.storageBucket ||
+    (import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string) ||
+    'rock-dahlia-c98sv.firebasestorage.app',
+  messagingSenderId:
+    firebaseConfigFromJson.messagingSenderId ||
+    (import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string) ||
+    '319057570342',
+  appId:
+    firebaseConfigFromJson.appId ||
+    (import.meta.env.VITE_FIREBASE_APP_ID as string) ||
+    '1:319057570342:web:c2931a14775c46cd3e94e7',
 };
 
 export const FIRESTORE_DATABASE_ID =
-  import.meta.env.VITE_FIREBASE_DATABASE_ID ||
   firebaseConfigFromJson.firestoreDatabaseId ||
   'ai-studio-collegelivequizp-ae986150-8e51-485d-ab2e-a4a61e8f651d';
 
