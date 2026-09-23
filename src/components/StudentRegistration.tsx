@@ -110,7 +110,7 @@ export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
             Student Registration
           </h2>
 
-          {/* Event Badge & Switcher */}
+          {/* Event Badge */}
           <div className="pt-1">
             <div className="inline-block bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 max-w-full">
               <span className="font-semibold text-slate-900">{quiz?.title || 'Selected Event'}</span>
@@ -118,23 +118,6 @@ export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
                 <span className="text-slate-500 ml-1.5">({quiz.scheduledDate} {quiz.scheduledTime})</span>
               )}
             </div>
-
-            {quizzes.length > 1 && onSelectQuiz && (
-              <div className="mt-2 flex items-center justify-center gap-1.5 text-xs">
-                <span className="text-slate-500">Wrong event?</span>
-                <select
-                  value={quiz?.id || ''}
-                  onChange={(e) => onSelectQuiz(e.target.value)}
-                  className="px-2 py-0.5 border border-slate-300 rounded text-xs bg-white text-blue-700 font-medium cursor-pointer"
-                >
-                  {quizzes.map((q) => (
-                    <option key={q.id} value={q.id}>
-                      {q.title} ({q.status})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
         </div>
 

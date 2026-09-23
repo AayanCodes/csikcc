@@ -370,19 +370,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Exam Controller Dashboard
               </h1>
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-slate-500">Event:</span>
-                <select
-                  value={quiz.id}
-                  onChange={(e) => onSelectQuiz(e.target.value)}
-                  className="text-xs font-semibold text-slate-900 bg-slate-50 border border-slate-300 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer max-w-[220px] truncate"
-                  title="Switch active quiz event"
-                >
-                  {quizzes.map((q) => (
-                    <option key={q.id} value={q.id}>
-                      {q.title} ({q.status})
-                    </option>
-                  ))}
-                </select>
                 <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
                   currentStatus === 'LIVE'
                     ? 'bg-emerald-100 text-emerald-800'
