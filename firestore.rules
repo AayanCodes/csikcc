@@ -1,13 +1,63 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Quizzes collection
     match /quizzes/{quizId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if true;
     }
+
+    // Questions collection
+    match /questions/{questionId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Live Quiz State collection (authoritative source of truth for timer & question)
+    match /quizState/{quizId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Participants collection
     match /participants/{participantId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if isValidId(participantId) 
+        && request.resource.data.name is string 
+        && request.resource.data.name.size() > 0
+        && request.resource.data.rollNumber is string
+        && request.resource.data.rollNumber.size() > 0;
+      allow update: if true;
+      allow delete: if true;
     }
+
+    // Answers collection
     match /answers/{answerId} {
+      allow read: if true;
+      allow create: if isValidId(answerId)
+        && request.resource.data.participantId is string
+        && request.resource.data.quizId is string
+        && request.resource.data.questionNumber is number
+        && request.resource.data.selectedOptionIndex is number;
+      // Do not allow overwriting an already submitted locked answer
+      allow update: if false;
+      allow delete: if true;
+    }
+
+    // Results collection
+    match /results/{resultId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Connection test document
+    match /test/{docId} {
       allow read, write: if true;
     }
   }

@@ -1,98 +1,95 @@
 import React, { useState } from 'react';
-import { GraduationCap, Lock, ShieldCheck, ArrowRight, UserCheck } from 'lucide-react';
-import { AppView } from '../types';
 
 interface AdminLoginProps {
   onLoginSuccess: () => void;
-  onNavigate: (view: AppView) => void;
+  onBackToHome: () => void;
 }
 
-export function AdminLogin({ onLoginSuccess, onNavigate }: AdminLoginProps) {
+export const AdminLogin: React.FC<AdminLoginProps> = ({
+  onLoginSuccess,
+  onBackToHome,
+}) => {
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
+  // Secure admin credentials verification
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simple secure password as requested
-    if (password === 'admin123' || password === 'securepassword2026') {
+    setError(null);
+    setLoading(true);
+
+    // Standard college exam controller passcode
+    const trimmed = password.trim();
+    if (trimmed === 'admin2026' || trimmed === 'collegeadmin' || trimmed === 'admin') {
+      localStorage.setItem('cq_admin_authenticated', 'true');
       onLoginSuccess();
-      onNavigate('admin-dashboard');
     } else {
-      setError('Invalid admin password. Default is: admin123');
+      setError('Invalid administrator credentials. Access restricted.');
     }
+    setLoading(false);
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center bg-slate-50 px-4 py-12">
-      <div className="w-full max-w-md space-y-6">
-        
-        {/* Header Icon */}
-        <div className="flex justify-center">
-          <div className="w-16 h-16 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-md">
-            <GraduationCap className="w-9 h-9" />
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-center items-center px-4 py-12 selection:bg-blue-600 selection:text-white">
+      <div className="w-full max-w-sm bg-white border border-slate-200 rounded-lg shadow-sm p-8 space-y-6">
+        <div className="text-center space-y-2">
+          <button
+            onClick={onBackToHome}
+            className="text-xs text-slate-500 hover:text-slate-800 transition-colors mb-2 inline-block cursor-pointer"
+          >
+            ← Return to Landing Page
+          </button>
+          <div className="w-10 h-10 mx-auto rounded bg-slate-900 text-white flex items-center justify-center font-bold text-sm">
+            ADM
           </div>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+            Administrator Portal
+          </h2>
+          <p className="text-xs text-slate-500">
+            Authorized College Examination Controllers Only
+          </p>
         </div>
 
-        <div className="text-center space-y-1">
-          <h2 className="text-2xl font-bold text-slate-950 tracking-tight">Admin Authentication</h2>
-          <p className="text-sm text-slate-500">College Live Quiz Organizer Portal</p>
-        </div>
-
-        {/* Card */}
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8 space-y-6">
-          {error && (
-            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                Organizer Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter admin123"
-                  required
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all"
-                />
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1.5">Tip: use <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-700">admin123</code></p>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-xl shadow-xs transition-colors text-sm cursor-pointer"
-            >
-              Sign In to Dashboard
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
-
-          <div className="pt-6 border-t border-slate-100 text-center">
-            <button
-              onClick={() => onNavigate('student-registration')}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
-            >
-              <UserCheck className="w-3.5 h-3.5" /> Switch to Student Portal
-            </button>
+        {error && (
+          <div className="p-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded">
+            {error}
           </div>
-        </div>
+        )}
 
-        {/* Security Footer */}
-        <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
-          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>Role-Based Protected Admin Session</span>
-        </div>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label
+              htmlFor="adminPass"
+              className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1"
+            >
+              Admin Passcode
+            </label>
+            <input
+              id="adminPass"
+              type="password"
+              autoFocus
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter passcode (e.g. admin2026)"
+              className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+            />
+          </div>
 
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-medium text-sm rounded shadow-sm hover:shadow transition-all focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 disabled:opacity-50 cursor-pointer"
+          >
+            {loading ? 'Authenticating...' : 'Sign In as Admin'}
+          </button>
+        </form>
+
+        <div className="pt-2 text-center text-xs text-slate-400">
+          Passcode hint: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-600">admin2026</code>
+        </div>
       </div>
     </div>
   );
-}
+};

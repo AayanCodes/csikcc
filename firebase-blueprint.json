@@ -2,20 +2,53 @@
   "entities": {
     "Quiz": {
       "title": "Quiz",
-      "description": "Quiz metadata and questions",
+      "description": "Quiz metadata and scheduling configuration",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "title": { "type": "string" },
         "description": { "type": "string" },
-        "status": { "type": "string" },
-        "currentQuestionIndex": { "type": "number" },
-        "timerSeconds": { "type": "number" },
+        "scheduledDate": { "type": "string" },
+        "scheduledTime": { "type": "string" },
+        "questionDurationSeconds": { "type": "number" },
         "totalQuestions": { "type": "number" },
-        "scheduledStartTime": { "type": "string" },
-        "createdAt": { "type": "string" }
+        "status": { "type": "string", "enum": ["WAITING", "LIVE", "ENDED", "RESULTS_PUBLISHED", "RESET"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
       },
       "required": ["id", "title", "status"]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "A single question belonging to a quiz",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "quizId": { "type": "string" },
+        "questionNumber": { "type": "number" },
+        "questionText": { "type": "string" },
+        "options": { "type": "array" },
+        "correctOptionIndex": { "type": "number" },
+        "durationSeconds": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "quizId", "questionNumber", "questionText", "options", "correctOptionIndex", "durationSeconds"]
+    },
+    "QuizState": {
+      "title": "QuizState",
+      "description": "Authoritative real-time state of the live quiz session",
+      "type": "object",
+      "properties": {
+        "quizId": { "type": "string" },
+        "status": { "type": "string", "enum": ["WAITING", "LIVE", "ENDED", "RESULTS_PUBLISHED", "RESET"] },
+        "currentQuestionNumber": { "type": "number" },
+        "currentQuestionId": { "type": "string" },
+        "questionStartTime": { "type": "number" },
+        "questionEndTime": { "type": "number" },
+        "durationSeconds": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["quizId", "status", "currentQuestionNumber"]
     },
     "Participant": {
       "title": "Participant",
@@ -23,37 +56,68 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
+        "quizId": { "type": "string" },
         "name": { "type": "string" },
         "rollNumber": { "type": "string" },
         "department": { "type": "string" },
-        "email": { "type": "string" },
-        "status": { "type": "string" },
-        "correctCount": { "type": "number" },
-        "wrongCount": { "type": "number" },
-        "totalScore": { "type": "number" }
+        "status": { "type": "string", "enum": ["WAITING", "LIVE", "COMPLETED"] },
+        "score": { "type": "number" },
+        "correct": { "type": "number" },
+        "incorrect": { "type": "number" },
+        "registeredAt": { "type": "string" }
       },
-      "required": ["id", "name", "rollNumber", "department", "status"]
+      "required": ["id", "quizId", "name", "rollNumber", "department", "status"]
     },
     "AnswerSubmission": {
       "title": "AnswerSubmission",
-      "description": "Student answer submission",
+      "description": "Locked student answer submission for a question",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "participantId": { "type": "string" },
         "quizId": { "type": "string" },
+        "questionId": { "type": "string" },
         "questionNumber": { "type": "number" },
+        "participantId": { "type": "string" },
         "selectedOptionIndex": { "type": "number" },
         "isCorrect": { "type": "boolean" },
-        "submittedAt": { "type": "string" }
+        "submittedAt": { "type": "number" }
       },
-      "required": ["participantId", "quizId", "questionNumber", "selectedOptionIndex", "isCorrect"]
+      "required": ["id", "quizId", "questionId", "questionNumber", "participantId", "selectedOptionIndex", "isCorrect", "submittedAt"]
+    },
+    "Result": {
+      "title": "Result",
+      "description": "Published quiz result for a participant",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "quizId": { "type": "string" },
+        "participantId": { "type": "string" },
+        "name": { "type": "string" },
+        "rollNumber": { "type": "string" },
+        "department": { "type": "string" },
+        "score": { "type": "number" },
+        "percentage": { "type": "number" },
+        "correct": { "type": "number" },
+        "incorrect": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "rank": { "type": "number" },
+        "publishedAt": { "type": "string" }
+      },
+      "required": ["id", "quizId", "participantId", "name", "rollNumber", "score", "percentage", "correct", "incorrect"]
     }
   },
   "firestore": {
     "/quizzes/{quizId}": {
       "schema": { "$ref": "#/entities/Quiz" },
       "description": "Quizzes collection"
+    },
+    "/questions/{questionId}": {
+      "schema": { "$ref": "#/entities/Question" },
+      "description": "Questions collection"
+    },
+    "/quizState/{quizId}": {
+      "schema": { "$ref": "#/entities/QuizState" },
+      "description": "Authoritative live quiz state collection"
     },
     "/participants/{participantId}": {
       "schema": { "$ref": "#/entities/Participant" },
@@ -62,6 +126,10 @@
     "/answers/{answerId}": {
       "schema": { "$ref": "#/entities/AnswerSubmission" },
       "description": "Answers collection"
+    },
+    "/results/{resultId}": {
+      "schema": { "$ref": "#/entities/Result" },
+      "description": "Results collection"
     }
   }
 }

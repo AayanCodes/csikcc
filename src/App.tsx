@@ -1,272 +1,401 @@
-import { useState, useEffect } from 'react';
-import { 
-  collection, doc, setDoc, updateDoc, deleteDoc, 
-  onSnapshot, getDocs, query, orderBy, Timestamp 
-} from 'firebase/firestore';
-import { db } from './lib/firebase';
-import { Quiz, Participant, AppView, QuizStatus } from './types';
-import { Navbar } from './components/Navbar';
-import { AdminLogin } from './components/AdminLogin';
-import { AdminDashboard } from './components/AdminDashboard';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Quiz,
+  Question,
+  QuizState,
+  Participant,
+  AnswerSubmission,
+  QuizResult,
+  AppView,
+} from './types';
+import {
+  DEFAULT_QUIZ_ID,
+  seedInitialQuizIfEmpty,
+  subscribeToQuizzes,
+  subscribeToQuestions,
+  subscribeToQuizState,
+  subscribeToParticipants,
+  subscribeToAnswers,
+  subscribeToResults,
+  subscribeToStudentAnswers,
+  subscribeToStudentResult,
+} from './lib/quizService';
+import { LandingPage } from './components/LandingPage';
 import { StudentRegistration } from './components/StudentRegistration';
 import { StudentWaitingLobby } from './components/StudentWaitingLobby';
-import { StudentInterface } from './components/StudentInterface';
+import { StudentQuiz } from './components/StudentQuiz';
+import { StudentResult } from './components/StudentResult';
 import { AuditoriumScreen } from './components/AuditoriumScreen';
-import { FirebaseSchemaView } from './components/FirebaseSchemaView';
-
-const SAMPLE_QUIZ: Quiz = {
-  id: 'quiz-college-2026',
-  title: 'Annual College Technical & Computer Science Quiz 2026',
-  description: 'Official assessment covering algorithms, web systems, databases, and computer architecture.',
-  status: 'SCHEDULED',
-  currentQuestionIndex: 0,
-  timerSeconds: 30,
-  totalQuestions: 4,
-  scheduledStartTime: new Date(Date.now() + 10 * 60 * 1000).toISOString().slice(0, 16),
-  createdAt: new Date().toLocaleDateString(),
-  questions: [
-    {
-      id: 'q1',
-      quizId: 'quiz-college-2026',
-      questionNumber: 1,
-      questionText: 'Which data structure uses LIFO (Last In, First Out) ordering?',
-      options: ['Queue', 'Stack', 'Array', 'Binary Tree'],
-      correctOptionIndex: 1, // Stack
-      durationSeconds: 30,
-    },
-    {
-      id: 'q2',
-      quizId: 'quiz-college-2026',
-      questionNumber: 2,
-      questionText: 'What does CSS stand for in web development?',
-      options: ['Computer Style Sheets', 'Cascading Style Sheets', 'Creative Style System', 'Colorful Style Syntax'],
-      correctOptionIndex: 1, // Cascading Style Sheets
-      durationSeconds: 30,
-    },
-    {
-      id: 'q3',
-      quizId: 'quiz-college-2026',
-      questionNumber: 3,
-      questionText: 'Which protocol is secure and encrypted for web browser communication?',
-      options: ['HTTP', 'FTP', 'HTTPS', 'SMTP'],
-      correctOptionIndex: 2, // HTTPS
-      durationSeconds: 30,
-    },
-    {
-      id: 'q4',
-      quizId: 'quiz-college-2026',
-      questionNumber: 4,
-      questionText: 'In relational databases, what does ACID stand for regarding transactions?',
-      options: [
-        'Atomicity, Consistency, Isolation, Durability', 
-        'Access Control In Database', 
-        'Async Core Indexing Design', 
-        'Automated Column Insertion Data'
-      ],
-      correctOptionIndex: 0,
-      durationSeconds: 30,
-    }
-  ]
-};
+import { AdminLogin } from './components/AdminLogin';
+import { AdminDashboard } from './components/AdminDashboard';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<AppView>('student-registration');
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
-  const [quizzes, setQuizzes] = useState<Quiz[]>([SAMPLE_QUIZ]);
+  const [currentView, setCurrentView] = useState<AppView>('landing');
+  const [dbError, setDbError] = useState<string | null>(null);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
+
+  // Authoritative Firestore Data State
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [activeQuizId, setActiveQuizId] = useState<string>(DEFAULT_QUIZ_ID);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [quizState, setQuizState] = useState<QuizState | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [answers, setAnswers] = useState<AnswerSubmission[]>([]);
+  const [results, setResults] = useState<QuizResult[]>([]);
+
+  // Current Student Session State
   const [currentParticipant, setCurrentParticipant] = useState<Participant | null>(null);
+  const [studentAnswers, setStudentAnswers] = useState<AnswerSubmission[]>([]);
+  const [studentResult, setStudentResult] = useState<QuizResult | null>(null);
 
-  // Real-time Firestore sync for quizzes
+  // Initialize Route / Hash on load and listen for hash changes
   useEffect(() => {
-    const unsubQuizzes = onSnapshot(collection(db, 'quizzes'), (snapshot) => {
-      const qList: Quiz[] = [];
-      snapshot.forEach((docSnap) => {
-        qList.push({ id: docSnap.id, ...docSnap.data() } as Quiz);
-      });
-      if (qList.length > 0) {
-        setQuizzes(qList);
-      } else {
-        // Seed default sample quiz if collection is empty
-        setDoc(doc(db, 'quizzes', SAMPLE_QUIZ.id), SAMPLE_QUIZ).catch(() => {});
-        setQuizzes([SAMPLE_QUIZ]);
+    const handleLocationChange = () => {
+      const hash = window.location.hash.toLowerCase();
+      const path = window.location.pathname.toLowerCase();
+
+      if (hash.includes('auditorium') || path.includes('auditorium')) {
+        setCurrentView('auditorium');
+      } else if (hash.includes('admin') || path.includes('admin')) {
+        const isAuth = localStorage.getItem('cq_admin_authenticated') === 'true';
+        setIsAdminAuthenticated(isAuth);
+        setCurrentView(isAuth ? 'admin-dashboard' : 'admin-login');
+      } else if (hash.includes('register') || path.includes('register')) {
+        setCurrentView('student-registration');
       }
-    }, (error) => {
-      console.warn('Firestore quizzes listener error:', error);
-    });
-
-    // Real-time Firestore sync for participants
-    const unsubParticipants = onSnapshot(collection(db, 'participants'), (snapshot) => {
-      const pList: Participant[] = [];
-      snapshot.forEach((docSnap) => {
-        pList.push({ id: docSnap.id, ...docSnap.data() } as Participant);
-      });
-      setParticipants(pList);
-    }, (error) => {
-      console.warn('Firestore participants listener error:', error);
-    });
-
-    return () => {
-      unsubQuizzes();
-      unsubParticipants();
     };
+
+    handleLocationChange();
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => window.removeEventListener('hashchange', handleLocationChange);
   }, []);
 
-  const activeQuiz = quizzes[0] || SAMPLE_QUIZ;
-
-  // Quiz Management Operations
-  const handleSaveQuiz = async (quiz: Quiz) => {
-    try {
-      await setDoc(doc(db, 'quizzes', quiz.id), quiz);
-    } catch (err) {
-      console.error('Error saving quiz:', err);
-      // Fallback local update
-      setQuizzes(prev => {
-        const exists = prev.some(q => q.id === quiz.id);
-        if (exists) return prev.map(q => q.id === quiz.id ? quiz : q);
-        return [quiz, ...prev];
-      });
+  // Restore participant session from memory/storage if exists
+  useEffect(() => {
+    const savedPartJson = sessionStorage.getItem('cq_current_participant');
+    if (savedPartJson) {
+      try {
+        const parsed = JSON.parse(savedPartJson) as Participant;
+        setCurrentParticipant(parsed);
+      } catch {
+        sessionStorage.removeItem('cq_current_participant');
+      }
     }
-  };
+  }, []);
 
-  const handleDeleteQuiz = async (quizId: string) => {
-    if (quizzes.length <= 1) {
-      alert('You must keep at least one quiz.');
-      return;
-    }
-    try {
-      await deleteDoc(doc(db, 'quizzes', quizId));
-    } catch (err) {
-      console.error('Error deleting quiz:', err);
-      setQuizzes(prev => prev.filter(q => q.id !== quizId));
-    }
-  };
+  // Ensure initial seed in Firestore on mount
+  useEffect(() => {
+    seedInitialQuizIfEmpty().catch((err) => {
+      console.warn('Initial database seed check note:', err);
+    });
+  }, []);
 
-  const handleUpdateQuizStatus = async (quizId: string, status: QuizStatus, nextIdx?: number) => {
-    const target = quizzes.find(q => q.id === quizId) || activeQuiz;
-    const updated: Quiz = {
-      ...target,
-      status,
-      currentQuestionIndex: typeof nextIdx === 'number' ? nextIdx : target.currentQuestionIndex,
-    };
+  // Subscribe to Quizzes list in Firestore
+  useEffect(() => {
+    const unsub = subscribeToQuizzes(
+      (list) => {
+        setQuizzes(list);
+        setDbError(null);
+        if (list.length > 0 && !list.some((q) => q.id === activeQuizId)) {
+          setActiveQuizId(list[0].id);
+        }
+      },
+      (err) => {
+        console.error('Quizzes subscription error:', err);
+        setDbError('Unable to connect to the quiz database.');
+      }
+    );
+    return () => unsub();
+  }, [activeQuizId]);
 
-    try {
-      await updateDoc(doc(db, 'quizzes', quizId), {
-        status,
-        currentQuestionIndex: updated.currentQuestionIndex
-      });
-    } catch (err) {
-      console.error('Error updating quiz status:', err);
-      setQuizzes(prev => prev.map(q => q.id === quizId ? updated : q));
-    }
-  };
+  const activeQuiz = useMemo(() => {
+    return quizzes.find((q) => q.id === activeQuizId) || null;
+  }, [quizzes, activeQuizId]);
 
-  const handleResetQuiz = async (quizId: string) => {
-    await handleUpdateQuizStatus(quizId, 'SCHEDULED', 0);
-  };
+  // Subscribe to Questions for active quiz
+  useEffect(() => {
+    if (!activeQuizId) return;
+    const unsub = subscribeToQuestions(
+      activeQuizId,
+      (qList) => {
+        setQuestions(qList);
+      },
+      (err) => {
+        console.error('Questions subscription error:', err);
+      }
+    );
+    return () => unsub();
+  }, [activeQuizId]);
 
-  // Student Registration & Answer Recording
-  const handleRegisterParticipant = async (participant: Participant) => {
-    setCurrentParticipant(participant);
-    try {
-      await setDoc(doc(db, 'participants', participant.id), participant);
-    } catch (err) {
-      console.error('Error registering participant:', err);
-      setParticipants(prev => [...prev.filter(p => p.id !== participant.id), participant]);
-    }
-  };
+  // Subscribe to Authoritative Quiz State in Firestore
+  useEffect(() => {
+    if (!activeQuizId) return;
+    const unsub = subscribeToQuizState(
+      activeQuizId,
+      (state) => {
+        setQuizState(state);
+      },
+      (err) => {
+        console.error('QuizState subscription error:', err);
+      }
+    );
+    return () => unsub();
+  }, [activeQuizId]);
 
-  const handleRecordAnswer = async (questionNumber: number, optionIndex: number, isCorrect: boolean) => {
+  // Subscribe to Participants for active quiz
+  useEffect(() => {
+    if (!activeQuizId) return;
+    const unsub = subscribeToParticipants(
+      activeQuizId,
+      (pList) => {
+        setParticipants(pList);
+      },
+      (err) => {
+        console.error('Participants subscription error:', err);
+      }
+    );
+    return () => unsub();
+  }, [activeQuizId]);
+
+  // Subscribe to Answers for active quiz
+  useEffect(() => {
+    if (!activeQuizId) return;
+    const unsub = subscribeToAnswers(
+      activeQuizId,
+      (aList) => {
+        setAnswers(aList);
+      },
+      (err) => {
+        console.error('Answers subscription error:', err);
+      }
+    );
+    return () => unsub();
+  }, [activeQuizId]);
+
+  // Subscribe to Results for active quiz
+  useEffect(() => {
+    if (!activeQuizId) return;
+    const unsub = subscribeToResults(
+      activeQuizId,
+      (rList) => {
+        setResults(rList);
+      },
+      (err) => {
+        console.error('Results subscription error:', err);
+      }
+    );
+    return () => unsub();
+  }, [activeQuizId]);
+
+  // Subscribe to current student's submitted answers
+  useEffect(() => {
+    if (!activeQuizId || !currentParticipant) return;
+    const unsub = subscribeToStudentAnswers(
+      activeQuizId,
+      currentParticipant.id,
+      (subs) => {
+        setStudentAnswers(subs);
+      },
+      (err) => {
+        console.error('Student answers subscription error:', err);
+      }
+    );
+    return () => unsub();
+  }, [activeQuizId, currentParticipant?.id]);
+
+  // Subscribe to current student's personal published result
+  useEffect(() => {
+    if (!activeQuizId || !currentParticipant) return;
+    const unsub = subscribeToStudentResult(
+      activeQuizId,
+      currentParticipant.id,
+      (res) => {
+        setStudentResult(res);
+      },
+      (err) => {
+        console.error('Student result subscription error:', err);
+      }
+    );
+    return () => unsub();
+  }, [activeQuizId, currentParticipant?.id]);
+
+  // REALTIME SYNCHRONIZATION FOR STUDENTS:
+  // Automatically switch student screen in response to authoritative Firestore quizState changes!
+  useEffect(() => {
     if (!currentParticipant) return;
+    // Don't override view if user is in admin or auditorium view
+    if (currentView === 'auditorium' || currentView.startsWith('admin')) return;
 
-    const updatedParticipant: Participant = {
-      ...currentParticipant,
-      correctCount: currentParticipant.correctCount + (isCorrect ? 1 : 0),
-      wrongCount: currentParticipant.wrongCount + (isCorrect ? 0 : 1),
-      totalScore: currentParticipant.totalScore + (isCorrect ? 1 : 0),
-      status: 'COMPLETED'
-    };
+    const status = quizState?.status;
 
-    setCurrentParticipant(updatedParticipant);
+    if (status === 'LIVE') {
+      if (currentView !== 'student-quiz') {
+        setCurrentView('student-quiz');
+      }
+    } else if (status === 'RESULTS_PUBLISHED') {
+      if (currentView !== 'student-result') {
+        setCurrentView('student-result');
+      }
+    } else if (status === 'WAITING') {
+      if (currentView === 'student-quiz' || currentView === 'student-result') {
+        setCurrentView('student-waiting');
+      }
+    } else if (status === 'ENDED') {
+      // Keep student in quiz or show result awaiting card
+      if (currentView === 'student-quiz') {
+        setCurrentView('student-result');
+      }
+    }
+  }, [quizState?.status, currentParticipant, currentView]);
 
-    try {
-      await updateDoc(doc(db, 'participants', updatedParticipant.id), {
-        correctCount: updatedParticipant.correctCount,
-        wrongCount: updatedParticipant.wrongCount,
-        totalScore: updatedParticipant.totalScore,
-        status: updatedParticipant.status
-      });
-    } catch (err) {
-      console.error('Error updating participant score:', err);
+  // Handle student registration
+  const handleStudentRegistered = (participant: Participant) => {
+    setCurrentParticipant(participant);
+    sessionStorage.setItem('cq_current_participant', JSON.stringify(participant));
+
+    if (quizState?.status === 'LIVE') {
+      setCurrentView('student-quiz');
+    } else {
+      setCurrentView('student-waiting');
     }
   };
+
+  // Find active question object
+  const currentQuestionNumber = quizState?.currentQuestionNumber || 1;
+  const currentActiveQuestion = useMemo(() => {
+    return questions.find((q) => q.questionNumber === currentQuestionNumber) || null;
+  }, [questions, currentQuestionNumber]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-600 selection:text-white">
-      <Navbar
-        currentView={currentView}
-        onNavigate={setCurrentView}
-        isAdminLoggedIn={isAdminLoggedIn}
-        onLogout={() => { setIsAdminLoggedIn(false); setCurrentView('student-registration'); }}
-      />
+      {/* Database Error Banner if connection fails */}
+      {dbError && (
+        <div className="bg-red-600 text-white text-xs px-4 py-2.5 text-center font-medium flex items-center justify-center space-x-2">
+          <span>⚠️</span>
+          <span>{dbError}</span>
+        </div>
+      )}
 
-      <main>
-        {currentView === 'admin-login' && (
-          <AdminLogin
-            onLoginSuccess={() => setIsAdminLoggedIn(true)}
-            onNavigate={setCurrentView}
-          />
-        )}
+      {/* VIEW: LANDING PAGE */}
+      {currentView === 'landing' && (
+        <LandingPage
+          quiz={activeQuiz}
+          onJoinQuiz={() => {
+            if (currentParticipant) {
+              if (quizState?.status === 'LIVE') setCurrentView('student-quiz');
+              else if (quizState?.status === 'RESULTS_PUBLISHED') setCurrentView('student-result');
+              else setCurrentView('student-waiting');
+            } else {
+              window.location.hash = 'register';
+              setCurrentView('student-registration');
+            }
+          }}
+          onOpenAdmin={() => {
+            window.location.hash = 'admin';
+            const isAuth = localStorage.getItem('cq_admin_authenticated') === 'true';
+            setCurrentView(isAuth ? 'admin-dashboard' : 'admin-login');
+          }}
+          onOpenAuditorium={() => {
+            window.location.hash = 'auditorium';
+            setCurrentView('auditorium');
+          }}
+        />
+      )}
 
-        {currentView.startsWith('admin') && currentView !== 'admin-login' && (
-          <AdminDashboard
-            quizzes={quizzes}
-            participants={participants}
-            onNavigate={setCurrentView}
-            onUpdateQuizStatus={handleUpdateQuizStatus}
-            onDeleteQuiz={handleDeleteQuiz}
-            onSaveQuiz={handleSaveQuiz}
-            onResetQuiz={handleResetQuiz}
-          />
-        )}
+      {/* VIEW: STUDENT REGISTRATION */}
+      {currentView === 'student-registration' && (
+        <StudentRegistration
+          quiz={activeQuiz}
+          onRegistered={handleStudentRegistered}
+          onBackToHome={() => {
+            window.location.hash = '';
+            setCurrentView('landing');
+          }}
+        />
+      )}
 
-        {currentView === 'student-registration' && (
-          <StudentRegistration
-            quiz={activeQuiz}
-            onRegister={handleRegisterParticipant}
-            onNavigate={setCurrentView}
-          />
-        )}
+      {/* VIEW: STUDENT WAITING LOBBY */}
+      {currentView === 'student-waiting' && (
+        <StudentWaitingLobby
+          quiz={activeQuiz}
+          participant={currentParticipant}
+        />
+      )}
 
-        {currentView === 'student-waiting' && (
-          <StudentWaitingLobby
-            quiz={activeQuiz}
-            participant={currentParticipant}
-            onEnterQuiz={() => setCurrentView('student-interface')}
-            onBackToRegistration={() => setCurrentView('student-registration')}
-          />
-        )}
+      {/* VIEW: STUDENT QUIZ INTERFACE */}
+      {currentView === 'student-quiz' && activeQuiz && quizState && currentParticipant && (
+        <StudentQuiz
+          quiz={activeQuiz}
+          quizState={quizState}
+          currentQuestion={currentActiveQuestion}
+          totalQuestions={questions.length || activeQuiz.totalQuestions}
+          participant={currentParticipant}
+          existingAnswers={studentAnswers}
+        />
+      )}
 
-        {currentView === 'student-interface' && (
-          <StudentInterface
-            quiz={activeQuiz}
-            participant={currentParticipant}
-            onBackToRegistration={() => setCurrentView('student-registration')}
-            onRecordAnswer={handleRecordAnswer}
-          />
-        )}
+      {/* VIEW: STUDENT RESULT (Personal result card only) */}
+      {currentView === 'student-result' && (
+        <StudentResult
+          result={studentResult}
+          quizTitle={activeQuiz?.title || 'College Live Quiz'}
+          onBackToHome={() => {
+            window.location.hash = '';
+            setCurrentView('landing');
+          }}
+        />
+      )}
 
-        {currentView === 'auditorium' && (
-          <AuditoriumScreen
-            quiz={activeQuiz}
-            participants={participants}
-            onBackToAdmin={() => setCurrentView(isAdminLoggedIn ? 'admin-dashboard' : 'student-registration')}
-          />
-        )}
+      {/* VIEW: AUDITORIUM DISPLAY */}
+      {currentView === 'auditorium' && (
+        <AuditoriumScreen
+          quiz={activeQuiz}
+          quizState={quizState}
+          currentQuestion={currentActiveQuestion}
+          totalQuestions={questions.length || activeQuiz?.totalQuestions || 4}
+          results={results}
+          onExitAuditorium={() => {
+            window.location.hash = '';
+            setCurrentView('landing');
+          }}
+        />
+      )}
 
-        {currentView === 'firebase-schema' && (
-          <FirebaseSchemaView />
-        )}
-      </main>
+      {/* VIEW: ADMIN LOGIN */}
+      {currentView === 'admin-login' && (
+        <AdminLogin
+          onLoginSuccess={() => {
+            setIsAdminAuthenticated(true);
+            setCurrentView('admin-dashboard');
+          }}
+          onBackToHome={() => {
+            window.location.hash = '';
+            setCurrentView('landing');
+          }}
+        />
+      )}
+
+      {/* VIEW: ADMIN DASHBOARD */}
+      {currentView === 'admin-dashboard' && activeQuiz && (
+        <AdminDashboard
+          quiz={activeQuiz}
+          quizState={quizState}
+          questions={questions}
+          participants={participants}
+          answers={answers}
+          results={results}
+          onLogout={() => {
+            localStorage.removeItem('cq_admin_authenticated');
+            setIsAdminAuthenticated(false);
+            window.location.hash = '';
+            setCurrentView('landing');
+          }}
+          onOpenAuditorium={() => {
+            window.location.hash = 'auditorium';
+            setCurrentView('auditorium');
+          }}
+        />
+      )}
     </div>
   );
 }
