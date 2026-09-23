@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Question } from '../types';
 
 interface AdminQuestionModalProps {
@@ -9,6 +9,51 @@ interface AdminQuestionModalProps {
   nextQuestionNumber: number;
   onSave: (question: Question) => Promise<void>;
 }
+
+// Client-side image compression to optimize mobile photos and PC uploads for Firestore
+const compressImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1200;
+        const MAX_HEIGHT = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width = Math.round((width * MAX_HEIGHT) / height);
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(e.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        // Clean JPEG compression, typically 40KB - 120KB
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        resolve(dataUrl);
+      };
+      img.onerror = () => reject(new Error('Failed to load image file.'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('Failed to read file.'));
+    reader.readAsDataURL(file);
+  });
+};
 
 export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
   isOpen,
@@ -27,7 +72,10 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
   const [imageUrl, setImageUrl] = useState('');
   const [duration, setDuration] = useState<number>(30);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (question) {
@@ -51,6 +99,39 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
     }
     setError(null);
   }, [question, isOpen]);
+
+  const handleProcessFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setError('Please select a valid image file (JPG, PNG, WebP, etc.).');
+      return;
+    }
+    setIsUploadingImage(true);
+    setError(null);
+    try {
+      const compressedDataUrl = await compressImage(file);
+      setImageUrl(compressedDataUrl);
+    } catch (err) {
+      console.error('Image upload failed:', err);
+      setError('Could not process the selected image. Please try another image.');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleProcessFile(file);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleProcessFile(file);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -123,27 +204,93 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-              Question Image URL (Optional)
-            </label>
-            <input
-              type="url"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="e.g. https://images.unsplash.com/... or image link"
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {imageUrl.trim() && (
-              <div className="mt-2 relative w-full h-32 bg-slate-100 rounded border border-slate-200 overflow-hidden">
-                <img
-                  src={imageUrl}
-                  alt="Question preview"
-                  className="w-full h-full object-contain"
-                  onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
+          {/* Question Image (Upload from Phone or PC) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+                Question Image (Optional)
+              </label>
+              {imageUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImageUrl('');
+                    if (fileInputRef.current) fileInputRef.current.value = '';
                   }}
-                />
+                  className="text-xs text-red-600 hover:text-red-800 font-semibold cursor-pointer flex items-center gap-1"
+                >
+                  <span>🗑️</span>
+                  <span>Remove Image</span>
+                </button>
+              )}
+            </div>
+
+            {/* Hidden native file input - supports mobile camera/gallery and PC file system */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+
+            {!imageUrl ? (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-2 ${
+                  isUploadingImage
+                    ? 'border-blue-400 bg-blue-50/50 cursor-wait'
+                    : 'border-slate-300 hover:border-blue-500 hover:bg-slate-50 bg-slate-50/40'
+                }`}
+              >
+                <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-2xl text-blue-600">
+                  {isUploadingImage ? '⏳' : '📷'}
+                </div>
+                {isUploadingImage ? (
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-blue-700">Optimizing & Uploading Image...</p>
+                    <p className="text-xs text-slate-500">Compressing for seamless projector sync</p>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">
+                        Upload Image from Phone or PC
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Tap on mobile to take a photo or select from gallery • Drag & drop on PC
+                      </p>
+                    </div>
+                    <span className="inline-flex items-center px-3 py-1 bg-white border border-slate-200 rounded-md text-xs font-semibold text-blue-600 shadow-2xs">
+                      Choose Photo / File
+                    </span>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="relative rounded-xl border border-slate-200 bg-slate-100 p-2 overflow-hidden space-y-2">
+                <div className="w-full h-44 rounded-lg bg-slate-900/5 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={imageUrl}
+                    alt="Question visual"
+                    className="max-h-40 w-auto object-contain rounded"
+                  />
+                </div>
+                <div className="flex items-center justify-between px-2 pb-1 text-xs">
+                  <span className="text-emerald-700 font-medium flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>Image ready for auditorium display</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-semibold cursor-pointer underline"
+                  >
+                    Change Image
+                  </button>
+                </div>
               </div>
             )}
           </div>

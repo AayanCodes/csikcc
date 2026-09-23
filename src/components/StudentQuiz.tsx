@@ -182,9 +182,9 @@ export const StudentQuiz: React.FC<StudentQuizProps> = ({
           </p>
         </div>
 
-        {/* Options to Choose: Option A, B, C, D */}
+        {/* Options to Choose: Exact Option Text */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
-          {currentQuestion.options.map((_, idx) => {
+          {currentQuestion.options.map((optionText, idx) => {
             const isThisSelected = selectedOption === idx;
             const disabled = isLocked || isTimerExpired;
             const label = optionLabels[idx] || String(idx + 1);
@@ -214,16 +214,16 @@ export const StudentQuiz: React.FC<StudentQuizProps> = ({
                 >
                   {label}
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <span
-                    className={`text-lg sm:text-xl font-bold block ${
+                    className={`text-base sm:text-lg font-bold block break-words ${
                       isThisSelected ? 'text-white' : 'text-slate-900'
                     }`}
                   >
-                    Option {label}
+                    {optionText || `Option ${label}`}
                   </span>
                   <span
-                    className={`text-xs block ${
+                    className={`text-xs block mt-0.5 ${
                       isThisSelected ? 'text-blue-100' : 'text-slate-500'
                     }`}
                   >
@@ -231,7 +231,7 @@ export const StudentQuiz: React.FC<StudentQuizProps> = ({
                       ? 'Selected & Locked'
                       : disabled
                       ? 'Selection Closed'
-                      : `Tap to choose Option ${label}`}
+                      : `Option ${label}`}
                   </span>
                 </div>
                 {isThisSelected && (

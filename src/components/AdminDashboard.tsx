@@ -1277,6 +1277,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {q.questionText}
                     </h4>
 
+                    {q.imageUrl && (
+                      <div className="w-full max-h-36 rounded-lg overflow-hidden bg-slate-50 border border-slate-200 flex items-center justify-start p-2">
+                        <img
+                          src={q.imageUrl}
+                          alt="Question visual illustration"
+                          className="max-h-32 w-auto object-contain rounded"
+                        />
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                       {q.options.map((opt, idx) => (
                         <div
