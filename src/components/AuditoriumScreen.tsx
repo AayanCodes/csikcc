@@ -117,10 +117,20 @@ export const AuditoriumScreen: React.FC<AuditoriumScreenProps> = ({
           </div>
 
           {/* Question Text: Massive typography for 1920x1080 visibility */}
-          <div className="py-10 md:py-16">
+          <div className="py-6 md:py-10 space-y-6">
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-semibold text-slate-900 leading-tight">
               {currentQuestion.questionText}
             </h1>
+
+            {currentQuestion.imageUrl && (
+              <div className="relative w-full max-h-96 rounded-xl overflow-hidden border-2 border-slate-300 bg-slate-100 flex items-center justify-center p-2">
+                <img
+                  src={currentQuestion.imageUrl}
+                  alt="Question illustration"
+                  className="max-h-80 w-auto object-contain rounded"
+                />
+              </div>
+            )}
           </div>
 
           {/* 4 Options Grid: High Contrast, Very Large */}

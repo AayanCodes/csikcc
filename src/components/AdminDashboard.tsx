@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Quiz,
   Question,
@@ -16,42 +16,56 @@ import {
   adminSaveQuestion,
   adminDeleteQuestion,
   adminSaveQuiz,
+  getStudentEventLink,
+  getAuditoriumEventLink,
 } from '../lib/quizService';
 import { AdminQuestionModal } from './AdminQuizEditorModal';
 import { AdminQRCodeModal } from './AdminQRCodeModal';
+import { AdminCreateEventModal } from './AdminCreateEventModal';
 import { testFirestoreConnection, FIREBASE_CONFIG, FIRESTORE_DATABASE_ID } from '../lib/firebase';
 import logoImg from '../logo.jpeg';
 
 interface AdminDashboardProps {
   quiz: Quiz;
+  quizzes: Quiz[];
   quizState: QuizState | null;
   questions: Question[];
   participants: Participant[];
   answers: AnswerSubmission[];
   results: QuizResult[];
+  onSelectQuiz: (quizId: string) => void;
+  onCreateQuiz: (quiz: Quiz, seedQuestions: boolean) => Promise<void>;
+  onDeleteQuiz: (quizId: string) => Promise<void>;
   onLogout: () => void;
-  onOpenAuditorium: () => void;
-  onOpenStudentLogin: () => void;
+  onOpenAuditorium: (quizId?: string) => void;
+  onOpenStudentLogin: (quizId?: string) => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   quiz,
+  quizzes,
   quizState,
   questions,
   participants,
   answers,
   results,
+  onSelectQuiz,
+  onCreateQuiz,
+  onDeleteQuiz,
   onLogout,
   onOpenAuditorium,
   onOpenStudentLogin,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'control' | 'questions' | 'participants' | 'results' | 'env'
+    'control' | 'events' | 'questions' | 'participants' | 'results' | 'env'
   >('control');
 
   const [isQuestionModalOpen, setIsQuestionModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  const [qrModalEvent, setQrModalEvent] = useState<Quiz | null>(null);
+  const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState(false);
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [showStudentPreviewModal, setShowStudentPreviewModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
@@ -73,6 +87,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editDate, setEditDate] = useState(quiz.scheduledDate || '');
   const [editTime, setEditTime] = useState(quiz.scheduledTime || '');
   const [isSavingDetails, setIsSavingDetails] = useState(false);
+
+  // Keep form fields synced when active quiz changes
+  useEffect(() => {
+    setEditTitle(quiz.title);
+    setEditDesc(quiz.description);
+    setEditDate(quiz.scheduledDate || '');
+    setEditTime(quiz.scheduledTime || '');
+  }, [quiz.id, quiz.title, quiz.description, quiz.scheduledDate, quiz.scheduledTime]);
 
   const currentStatus = quizState?.status || quiz.status || 'WAITING';
   const currentQNum = quizState?.currentQuestionNumber || 1;
@@ -263,8 +285,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-blue-600 selection:text-white">
       {/* Top Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-30 shadow-2xs">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <header className="bg-white border-b border-slate-200 px-6 py-3.5 sticky top-0 z-30 shadow-2xs">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
             <img
               src={logoImg}
@@ -275,40 +297,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <h1 className="text-base font-bold text-slate-900 leading-none">
                 Exam Controller Dashboard
               </h1>
-              <p className="text-xs text-slate-500 mt-1">
-                {quiz.title} • Status:{' '}
-                <span className="font-semibold text-blue-600 uppercase">
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-slate-500">Event:</span>
+                <select
+                  value={quiz.id}
+                  onChange={(e) => onSelectQuiz(e.target.value)}
+                  className="text-xs font-semibold text-slate-900 bg-slate-50 border border-slate-300 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer max-w-[220px] truncate"
+                  title="Switch active quiz event"
+                >
+                  {quizzes.map((q) => (
+                    <option key={q.id} value={q.id}>
+                      {q.title} ({q.status})
+                    </option>
+                  ))}
+                </select>
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                  currentStatus === 'LIVE'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : currentStatus === 'RESULTS_PUBLISHED'
+                    ? 'bg-purple-100 text-purple-800'
+                    : 'bg-blue-100 text-blue-800'
+                }`}>
                   {currentStatus}
                 </span>
-              </p>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={onOpenStudentLogin}
-              className="text-xs font-semibold px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
-              title="Open Student Registration and Login Screen"
+              onClick={() => setIsCreateEventModalOpen(true)}
+              className="text-xs font-bold px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded shadow-2xs transition-colors cursor-pointer flex items-center gap-1"
+              title="Create a new quiz event"
             >
-              <span>👤</span>
-              <span>Show Student Login Page</span>
+              <span>➕</span>
+              <span>New Event</span>
             </button>
             <button
-              onClick={() => setIsQRModalOpen(true)}
-              className="text-xs font-medium px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 rounded text-slate-700 transition-colors cursor-pointer"
+              onClick={() => setActiveTab('events')}
+              className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors cursor-pointer flex items-center gap-1 ${
+                activeTab === 'events'
+                  ? 'bg-blue-50 border-blue-400 text-blue-800 font-bold'
+                  : 'bg-white border-slate-300 hover:bg-slate-50 text-slate-700'
+              }`}
+              title="View all events and direct student links"
             >
-              QR / Event Link
+              <span>🔗</span>
+              <span>All Events & Links ({quizzes.length})</span>
             </button>
             <button
-              onClick={onOpenAuditorium}
+              onClick={() => {
+                setQrModalEvent(quiz);
+                setIsQRModalOpen(true);
+              }}
+              className="text-xs font-medium px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 rounded text-slate-700 transition-colors cursor-pointer flex items-center gap-1"
+              title="View QR Code & Links for current event"
+            >
+              <span>📱</span>
+              <span>QR / Link</span>
+            </button>
+            <button
+              onClick={() => onOpenAuditorium(quiz.id)}
               className="text-xs font-medium px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 rounded text-slate-700 transition-colors cursor-pointer"
             >
               Auditorium Screen
             </button>
             <button
               onClick={onLogout}
-              className="text-xs font-medium px-3 py-1.5 text-slate-600 hover:text-red-700 hover:bg-red-50 rounded border border-transparent hover:border-red-200 transition-colors cursor-pointer flex items-center gap-1.5"
-              title="Sign Out and return to Front Page"
+              className="text-xs font-medium px-2.5 py-1.5 text-slate-600 hover:text-red-700 hover:bg-red-50 rounded border border-transparent hover:border-red-200 transition-colors cursor-pointer flex items-center gap-1"
+              title="Sign Out"
             >
               <span>🚪</span>
               <span>Sign Out</span>
@@ -352,10 +409,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 space-x-6 text-sm font-medium text-slate-600">
+        <div className="flex border-b border-slate-200 space-x-6 text-sm font-medium text-slate-600 overflow-x-auto">
           <button
             onClick={() => setActiveTab('control')}
-            className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'control'
                 ? 'border-blue-600 text-blue-600 font-semibold'
                 : 'border-transparent hover:text-slate-900'
@@ -364,8 +421,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             Live Quiz Control
           </button>
           <button
+            onClick={() => setActiveTab('events')}
+            className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
+              activeTab === 'events'
+                ? 'border-blue-600 text-blue-600 font-semibold'
+                : 'border-transparent hover:text-slate-900'
+            }`}
+          >
+            <span>🔗</span>
+            <span>Events & Links ({quizzes.length})</span>
+          </button>
+          <button
             onClick={() => setActiveTab('questions')}
-            className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'questions'
                 ? 'border-blue-600 text-blue-600 font-semibold'
                 : 'border-transparent hover:text-slate-900'
@@ -375,7 +443,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('participants')}
-            className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'participants'
                 ? 'border-blue-600 text-blue-600 font-semibold'
                 : 'border-transparent hover:text-slate-900'
@@ -385,7 +453,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('results')}
-            className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'results'
                 ? 'border-blue-600 text-blue-600 font-semibold'
                 : 'border-transparent hover:text-slate-900'
@@ -395,7 +463,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('env')}
-            className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+            className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'env'
                 ? 'border-blue-600 text-blue-600 font-semibold'
                 : 'border-transparent hover:text-slate-900'
@@ -424,7 +492,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    onClick={onOpenStudentLogin}
+                    onClick={() => onOpenStudentLogin(quiz.id)}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
                   >
                     <span>👤</span>
@@ -768,6 +836,240 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
+        {/* TAB: EVENTS & STUDENT LINKS */}
+        {activeTab === 'events' && (
+          <div className="space-y-6">
+            {/* Header / Intro card */}
+            <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-xl p-6 shadow-md">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🏆</span>
+                    <h2 className="text-lg font-bold">
+                      Multiple Competition Events & Shareable Links
+                    </h2>
+                  </div>
+                  <p className="text-xs text-blue-200 max-w-2xl leading-relaxed">
+                    Host multiple quiz events at the same time or across different schedules. Every event generates its own unique student registration link and big-screen auditorium display. Students joining an event link enter that specific competition room.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsCreateEventModalOpen(true)}
+                  className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+                >
+                  <span>➕</span>
+                  <span>Create New Quiz Event</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Event Cards */}
+            <div className="space-y-4">
+              {quizzes.map((q) => {
+                const isActive = q.id === quiz.id;
+                const studentUrl = getStudentEventLink(q.id);
+                const auditoriumUrl = getAuditoriumEventLink(q.id);
+                const isStudentCopied = copiedLinkId === `student-${q.id}`;
+                const isAudCopied = copiedLinkId === `aud-${q.id}`;
+
+                return (
+                  <div
+                    key={q.id}
+                    className={`bg-white border rounded-xl p-6 shadow-xs transition-all space-y-5 ${
+                      isActive
+                        ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {/* Event Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-bold text-lg text-slate-900">
+                            {q.title}
+                          </h3>
+                          <span className="font-mono text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                            ID: {q.id}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                              q.status === 'LIVE'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : q.status === 'RESULTS_PUBLISHED'
+                                ? 'bg-purple-100 text-purple-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}
+                          >
+                            {q.status}
+                          </span>
+                          {isActive && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-blue-600 text-white rounded flex items-center gap-1">
+                              <span>🎯</span> Active in Live Controller
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-600">
+                          {q.description}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {!isActive ? (
+                          <button
+                            onClick={() => {
+                              onSelectQuiz(q.id);
+                              setActiveTab('control');
+                            }}
+                            className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded border border-blue-200 transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <span>🎮</span>
+                            <span>Switch Controller to this Event</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setActiveTab('control')}
+                            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <span>🎮</span>
+                            <span>Open Live Controller</span>
+                          </button>
+                        )}
+
+                        {quizzes.length > 1 && (
+                          <button
+                            onClick={() => {
+                              setConfirmModal({
+                                title: `Delete "${q.title}"?`,
+                                message: `Are you sure you want to delete this event (ID: ${q.id})? All associated questions, participant records, and live results will be removed.`,
+                                confirmLabel: 'Yes, Delete Event',
+                                onConfirm: async () => {
+                                  setConfirmModal(null);
+                                  await onDeleteQuiz(q.id);
+                                  showFeedback(`Event "${q.title}" deleted.`);
+                                },
+                              });
+                            }}
+                            className="px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded border border-transparent hover:border-red-200 transition-colors cursor-pointer"
+                            title="Delete this event"
+                          >
+                            🗑️ Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Metadata chips */}
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <span>📅 <strong>Date:</strong> {q.scheduledDate || 'Flexible'}</span>
+                      <span>⏰ <strong>Time:</strong> {q.scheduledTime || 'Live'}</span>
+                      <span>⏱️ <strong>Timer:</strong> {q.questionDurationSeconds || 30}s/Question</span>
+                      <span>❓ <strong>Questions:</strong> {isActive ? questions.length : (q.totalQuestions || 0)}</span>
+                      <span>👥 <strong>Participants:</strong> {isActive ? participants.length : 'Live sync'}</span>
+                    </div>
+
+                    {/* LINKS SECTION */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-1">
+                      {/* 1. Student Direct Link */}
+                      <div className="p-4 bg-blue-50/50 border border-blue-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 font-bold text-xs text-blue-950">
+                            <span>🎓</span>
+                            <span>Student Direct Registration Link</span>
+                          </div>
+                          <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-medium">
+                            Share with students
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={studentUrl}
+                            className="w-full px-3 py-1.5 text-xs font-mono bg-white border border-blue-300 rounded text-slate-800 focus:outline-none select-all"
+                          />
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          <button
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(studentUrl);
+                              setCopiedLinkId(`student-${q.id}`);
+                              setTimeout(() => setCopiedLinkId(null), 2500);
+                            }}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                          >
+                            <span>{isStudentCopied ? '✓ Copied URL!' : '📋 Copy Student Link'}</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setQrModalEvent(q);
+                              setIsQRModalOpen(true);
+                            }}
+                            className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-medium rounded transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <span>📱</span>
+                            <span>QR Code</span>
+                          </button>
+                          <button
+                            onClick={() => onOpenStudentLogin(q.id)}
+                            className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-medium rounded transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <span>↗️</span>
+                            <span>Open Registration</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 2. Auditorium Display Link */}
+                      <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900">
+                            <span>📽️</span>
+                            <span>Auditorium Projector Display Link</span>
+                          </div>
+                          <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-medium">
+                            Display on projector
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={auditoriumUrl}
+                            className="w-full px-3 py-1.5 text-xs font-mono bg-white border border-slate-300 rounded text-slate-800 focus:outline-none select-all"
+                          />
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          <button
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(auditoriumUrl);
+                              setCopiedLinkId(`aud-${q.id}`);
+                              setTimeout(() => setCopiedLinkId(null), 2500);
+                            }}
+                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <span>{isAudCopied ? '✓ Copied URL!' : '📋 Copy Screen Link'}</span>
+                          </button>
+                          <button
+                            onClick={() => onOpenAuditorium(q.id)}
+                            className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-medium rounded transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <span>📽️</span>
+                            <span>Launch Auditorium Screen</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* TAB 2: QUESTIONS MANAGEMENT */}
         {activeTab === 'questions' && (
           <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-xs space-y-6">
@@ -1085,8 +1387,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* QR Code Modal */}
       <AdminQRCodeModal
         isOpen={isQRModalOpen}
-        onClose={() => setIsQRModalOpen(false)}
-        defaultUrl={`${window.location.origin}/#register`}
+        onClose={() => {
+          setIsQRModalOpen(false);
+          setQrModalEvent(null);
+        }}
+        eventTitle={qrModalEvent ? qrModalEvent.title : quiz.title}
+        quizId={qrModalEvent ? qrModalEvent.id : quiz.id}
+        defaultUrl={getStudentEventLink(qrModalEvent ? qrModalEvent.id : quiz.id)}
+      />
+
+      {/* Create New Event Modal */}
+      <AdminCreateEventModal
+        isOpen={isCreateEventModalOpen}
+        onClose={() => setIsCreateEventModalOpen(false)}
+        existingQuizIds={quizzes.map((q) => q.id)}
+        onCreate={async (newQuiz, seedQuestions) => {
+          await onCreateQuiz(newQuiz, seedQuestions);
+          showFeedback(`New event "${newQuiz.title}" created successfully!`);
+          setActiveTab('events');
+        }}
       />
 
       {/* Student Login Live Preview Modal */}

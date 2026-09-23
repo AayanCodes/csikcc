@@ -149,10 +149,20 @@ export const StudentQuiz: React.FC<StudentQuizProps> = ({
         )}
 
         {/* Question Text */}
-        <div className="bg-white border border-slate-200 rounded-lg p-6 sm:p-8 shadow-xs">
+        <div className="bg-white border border-slate-200 rounded-lg p-6 sm:p-8 shadow-xs space-y-4">
           <h2 className="text-xl sm:text-2xl font-medium text-slate-900 leading-relaxed">
             {currentQuestion.questionText}
           </h2>
+
+          {currentQuestion.imageUrl && (
+            <div className="relative w-full max-h-72 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center p-2">
+              <img
+                src={currentQuestion.imageUrl}
+                alt="Question illustration"
+                className="max-h-60 w-auto object-contain rounded"
+              />
+            </div>
+          )}
         </div>
 
         {/* 4 Options */}

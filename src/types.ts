@@ -12,6 +12,7 @@ export interface Question {
   quizId: string;
   questionNumber: number;
   questionText: string;
+  imageUrl?: string;
   options: [string, string, string, string] | string[];
   correctOptionIndex: number; // 0 for A, 1 for B, 2 for C, 3 for D
   durationSeconds: number;

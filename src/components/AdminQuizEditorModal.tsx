@@ -24,6 +24,7 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
   const [optC, setOptC] = useState('');
   const [optD, setOptD] = useState('');
   const [correctIndex, setCorrectIndex] = useState<number>(0);
+  const [imageUrl, setImageUrl] = useState('');
   const [duration, setDuration] = useState<number>(30);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,7 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
   useEffect(() => {
     if (question) {
       setQuestionText(question.questionText);
+      setImageUrl(question.imageUrl || '');
       setOptA(question.options[0] || '');
       setOptB(question.options[1] || '');
       setOptC(question.options[2] || '');
@@ -39,6 +41,7 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
       setDuration(question.durationSeconds || 30);
     } else {
       setQuestionText('');
+      setImageUrl('');
       setOptA('');
       setOptB('');
       setOptC('');
@@ -69,6 +72,7 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
         quizId,
         questionNumber: question ? question.questionNumber : nextQuestionNumber,
         questionText: questionText.trim(),
+        imageUrl: imageUrl.trim() || undefined,
         options: [optA.trim(), optB.trim(), optC.trim(), optD.trim()],
         correctOptionIndex: correctIndex,
         durationSeconds: duration > 0 ? duration : 30,
@@ -117,6 +121,31 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
               placeholder="e.g. Which layer of the OSI model does the TCP protocol belong to?"
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
+              Question Image URL (Optional)
+            </label>
+            <input
+              type="url"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              placeholder="e.g. https://images.unsplash.com/... or image link"
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {imageUrl.trim() && (
+              <div className="mt-2 relative w-full h-32 bg-slate-100 rounded border border-slate-200 overflow-hidden">
+                <img
+                  src={imageUrl}
+                  alt="Question preview"
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

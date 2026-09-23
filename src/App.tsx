@@ -19,6 +19,9 @@ import {
   subscribeToResults,
   subscribeToStudentAnswers,
   subscribeToStudentResult,
+  adminCreateNewQuiz,
+  adminDeleteQuiz,
+  extractQuizIdFromLocation,
 } from './lib/quizService';
 import { LandingPage } from './components/LandingPage';
 import { StudentRegistration } from './components/StudentRegistration';
@@ -36,7 +39,9 @@ export default function App() {
 
   // Authoritative Firestore Data State
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
-  const [activeQuizId, setActiveQuizId] = useState<string>(DEFAULT_QUIZ_ID);
+  const [activeQuizId, setActiveQuizId] = useState<string>(() => {
+    return extractQuizIdFromLocation() || DEFAULT_QUIZ_ID;
+  });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [quizState, setQuizState] = useState<QuizState | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -51,6 +56,12 @@ export default function App() {
   // Initialize Route / Hash on load and listen for hash changes
   useEffect(() => {
     const handleLocationChange = () => {
+      // Extract target quiz ID if encoded in hash or search param
+      const targetQuizId = extractQuizIdFromLocation();
+      if (targetQuizId) {
+        setActiveQuizId(targetQuizId);
+      }
+
       const hash = window.location.hash.toLowerCase();
       const path = window.location.pathname.toLowerCase();
 
@@ -273,6 +284,29 @@ export default function App() {
     return questions.find((q) => q.questionNumber === currentQuestionNumber) || null;
   }, [questions, currentQuestionNumber]);
 
+  const handleSelectQuiz = (quizId: string) => {
+    setActiveQuizId(quizId);
+  };
+
+  const handleCreateQuiz = async (newQuiz: Quiz, seedQuestions: boolean) => {
+    await adminCreateNewQuiz(newQuiz, seedQuestions);
+    setActiveQuizId(newQuiz.id);
+  };
+
+  const handleDeleteQuiz = async (quizIdToDelete: string) => {
+    await adminDeleteQuiz(quizIdToDelete);
+    if (activeQuizId === quizIdToDelete) {
+      const remaining = quizzes.filter((q) => q.id !== quizIdToDelete);
+      if (remaining.length > 0) {
+        setActiveQuizId(remaining[0].id);
+      } else {
+        setActiveQuizId(DEFAULT_QUIZ_ID);
+      }
+    }
+  };
+
+  const resolvedQuiz = activeQuiz || quizzes[0] || null;
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-600 selection:text-white">
       {/* Database Error Banner if connection fails */}
@@ -286,24 +320,31 @@ export default function App() {
       {/* VIEW: LANDING PAGE */}
       {currentView === 'landing' && (
         <LandingPage
-          quiz={activeQuiz}
-          onJoinQuiz={() => {
-            if (currentParticipant) {
+          quizzes={quizzes}
+          activeQuiz={resolvedQuiz}
+          onSelectQuiz={handleSelectQuiz}
+          onJoinQuiz={(quizId) => {
+            const targetId = quizId || activeQuizId;
+            if (targetId) setActiveQuizId(targetId);
+            if (currentParticipant && currentParticipant.quizId === targetId) {
               if (quizState?.status === 'LIVE') setCurrentView('student-quiz');
               else if (quizState?.status === 'RESULTS_PUBLISHED') setCurrentView('student-result');
               else setCurrentView('student-waiting');
             } else {
-              window.location.hash = 'register';
+              window.location.hash = targetId ? `register?quiz=${targetId}` : 'register';
               setCurrentView('student-registration');
             }
           }}
           onOpenAdmin={() => {
             window.location.hash = 'admin';
             const isAuth = localStorage.getItem('cq_admin_authenticated') === 'true';
+            setIsAdminAuthenticated(isAuth);
             setCurrentView(isAuth ? 'admin-dashboard' : 'admin-login');
           }}
-          onOpenAuditorium={() => {
-            window.location.hash = 'auditorium';
+          onOpenAuditorium={(quizId) => {
+            const targetId = quizId || activeQuizId;
+            if (targetId) setActiveQuizId(targetId);
+            window.location.hash = targetId ? `auditorium?quiz=${targetId}` : 'auditorium';
             setCurrentView('auditorium');
           }}
         />
@@ -312,7 +353,9 @@ export default function App() {
       {/* VIEW: STUDENT REGISTRATION */}
       {currentView === 'student-registration' && (
         <StudentRegistration
-          quiz={activeQuiz}
+          quiz={resolvedQuiz}
+          quizzes={quizzes}
+          onSelectQuiz={handleSelectQuiz}
           isAdmin={isAdminAuthenticated}
           onReturnToAdmin={() => {
             window.location.hash = 'admin';
@@ -329,7 +372,7 @@ export default function App() {
       {/* VIEW: STUDENT WAITING LOBBY */}
       {currentView === 'student-waiting' && (
         <StudentWaitingLobby
-          quiz={activeQuiz}
+          quiz={resolvedQuiz}
           participant={currentParticipant}
           onSignOut={() => {
             sessionStorage.removeItem('cq_current_participant');
@@ -345,7 +388,7 @@ export default function App() {
       {/* VIEW: STUDENT QUIZ INTERFACE */}
       {currentView === 'student-quiz' && activeQuiz && quizState && currentParticipant && (
         <StudentQuiz
-          quiz={activeQuiz}
+          quiz={resolvedQuiz}
           quizState={quizState}
           currentQuestion={currentActiveQuestion}
           totalQuestions={questions.length || activeQuiz.totalQuestions}
@@ -373,7 +416,7 @@ export default function App() {
       {/* VIEW: AUDITORIUM DISPLAY */}
       {currentView === 'auditorium' && (
         <AuditoriumScreen
-          quiz={activeQuiz}
+          quiz={resolvedQuiz}
           quizState={quizState}
           currentQuestion={currentActiveQuestion}
           totalQuestions={questions.length || activeQuiz?.totalQuestions || 4}
@@ -400,14 +443,18 @@ export default function App() {
       )}
 
       {/* VIEW: ADMIN DASHBOARD */}
-      {currentView === 'admin-dashboard' && activeQuiz && (
+      {currentView === 'admin-dashboard' && resolvedQuiz && (
         <AdminDashboard
-          quiz={activeQuiz}
+          quiz={resolvedQuiz}
+          quizzes={quizzes}
           quizState={quizState}
           questions={questions}
           participants={participants}
           answers={answers}
           results={results}
+          onSelectQuiz={handleSelectQuiz}
+          onCreateQuiz={handleCreateQuiz}
+          onDeleteQuiz={handleDeleteQuiz}
           onLogout={() => {
             localStorage.removeItem('cq_admin_authenticated');
             setIsAdminAuthenticated(false);
@@ -419,12 +466,16 @@ export default function App() {
             }
             setCurrentView('landing');
           }}
-          onOpenAuditorium={() => {
-            window.location.hash = 'auditorium';
+          onOpenAuditorium={(quizId) => {
+            const targetId = quizId || activeQuizId;
+            if (targetId) setActiveQuizId(targetId);
+            window.location.hash = targetId ? `auditorium?quiz=${targetId}` : 'auditorium';
             setCurrentView('auditorium');
           }}
-          onOpenStudentLogin={() => {
-            window.location.hash = 'register';
+          onOpenStudentLogin={(quizId) => {
+            const targetId = quizId || activeQuizId;
+            if (targetId) setActiveQuizId(targetId);
+            window.location.hash = targetId ? `register?quiz=${targetId}` : 'register';
             setCurrentView('student-registration');
           }}
         />

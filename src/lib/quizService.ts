@@ -652,11 +652,158 @@ export async function adminSaveQuiz(quiz: Quiz): Promise<void> {
   }
 }
 
+export function generateStarterQuestions(quizId: string): Question[] {
+  const now = new Date().toISOString();
+  return [
+    {
+      id: `${quizId}_q1`,
+      quizId,
+      questionNumber: 1,
+      questionText: 'Which protocol is used for encrypted, secure web communications over SSL/TLS?',
+      options: ['HTTP', 'FTP', 'HTTPS', 'SMTP'],
+      correctOptionIndex: 2,
+      durationSeconds: 30,
+      createdAt: now,
+    },
+    {
+      id: `${quizId}_q2`,
+      quizId,
+      questionNumber: 2,
+      questionText: 'Which data structure strictly operates on a Last-In, First-Out (LIFO) order?',
+      options: ['Queue', 'Stack', 'Array', 'Binary Search Tree'],
+      correctOptionIndex: 1,
+      durationSeconds: 30,
+      createdAt: now,
+    },
+    {
+      id: `${quizId}_q3`,
+      quizId,
+      questionNumber: 3,
+      questionText: 'In database management systems, what does the "A" in the ACID guarantee represent?',
+      options: ['Atomicity', 'Access Control', 'Authentication', 'Asynchronous'],
+      correctOptionIndex: 0,
+      durationSeconds: 30,
+      createdAt: now,
+    },
+    {
+      id: `${quizId}_q4`,
+      quizId,
+      questionNumber: 4,
+      questionText: 'What is the average case time complexity of searching a balanced Binary Search Tree (BST)?',
+      options: ['O(n)', 'O(n log n)', 'O(log n)', 'O(1)'],
+      correctOptionIndex: 2,
+      durationSeconds: 30,
+      createdAt: now,
+    },
+  ];
+}
+
+export async function adminCreateNewQuiz(
+  quiz: Quiz,
+  seedQuestions: boolean = true
+): Promise<void> {
+  try {
+    const batch = writeBatch(db);
+    const questions = seedQuestions ? generateStarterQuestions(quiz.id) : [];
+    const quizWithTotal: Quiz = {
+      ...quiz,
+      totalQuestions: questions.length,
+      createdAt: quiz.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    batch.set(doc(db, 'quizzes', quiz.id), quizWithTotal);
+
+    const initialQuizState: QuizState = {
+      quizId: quiz.id,
+      status: 'WAITING',
+      currentQuestionNumber: 1,
+      currentQuestionId: questions[0]?.id || '',
+      questionStartTime: 0,
+      questionEndTime: 0,
+      durationSeconds: quiz.questionDurationSeconds || 30,
+      updatedAt: Date.now(),
+    };
+    batch.set(doc(db, 'quizState', quiz.id), initialQuizState);
+
+    for (const q of questions) {
+      batch.set(doc(db, 'questions', q.id), q);
+    }
+
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `quizzes/${quiz.id}`);
+  }
+}
+
 export async function adminDeleteQuiz(quizId: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, 'quizzes', quizId));
-    await deleteDoc(doc(db, 'quizState', quizId));
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'quizzes', quizId));
+    batch.delete(doc(db, 'quizState', quizId));
+
+    // Delete associated questions
+    const qSnap = await getDocs(query(collection(db, 'questions'), where('quizId', '==', quizId)));
+    qSnap.forEach((d) => batch.delete(d.ref));
+
+    // Delete associated participants
+    const pSnap = await getDocs(query(collection(db, 'participants'), where('quizId', '==', quizId)));
+    pSnap.forEach((d) => batch.delete(d.ref));
+
+    // Delete associated answers
+    const aSnap = await getDocs(query(collection(db, 'answers'), where('quizId', '==', quizId)));
+    aSnap.forEach((d) => batch.delete(d.ref));
+
+    // Delete associated results
+    const rSnap = await getDocs(query(collection(db, 'results'), where('quizId', '==', quizId)));
+    rSnap.forEach((d) => batch.delete(d.ref));
+
+    await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `quizzes/${quizId}`);
   }
+}
+
+export function getStudentEventLink(quizId: string): string {
+  if (typeof window === 'undefined') return '';
+  const origin = window.location.origin;
+  const path = window.location.pathname.replace(/\/$/, '');
+  return `${origin}${path}#register?quiz=${encodeURIComponent(quizId)}`;
+}
+
+export function getAuditoriumEventLink(quizId: string): string {
+  if (typeof window === 'undefined') return '';
+  const origin = window.location.origin;
+  const path = window.location.pathname.replace(/\/$/, '');
+  return `${origin}${path}#auditorium?quiz=${encodeURIComponent(quizId)}`;
+}
+
+export function extractQuizIdFromLocation(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  // 1. Check window.location.search (?quiz=... or ?event=...)
+  const searchParams = new URLSearchParams(window.location.search);
+  const quizFromSearch = searchParams.get('quiz') || searchParams.get('event');
+  if (quizFromSearch) return quizFromSearch;
+
+  // 2. Check window.location.hash
+  const hash = window.location.hash;
+  if (hash) {
+    // If hash has query string e.g. #register?quiz=abc or #auditorium?quiz=abc
+    const qIdx = hash.indexOf('?');
+    if (qIdx !== -1) {
+      const hashParams = new URLSearchParams(hash.slice(qIdx + 1));
+      const val = hashParams.get('quiz') || hashParams.get('event');
+      if (val) return val;
+    }
+    // If hash has #event=abc or #quiz=abc
+    const matchParam = hash.match(/(?:quiz|event)=([^&?#/]+)/i);
+    if (matchParam && matchParam[1]) return decodeURIComponent(matchParam[1]);
+
+    // If hash is #register/abc or #event/abc
+    const matchSlash = hash.match(/#(?:register|event|quiz|auditorium)\/([^&?#/]+)/i);
+    if (matchSlash && matchSlash[1]) return decodeURIComponent(matchSlash[1]);
+  }
+
+  return null;
 }
