@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Quiz } from '../types';
 import logoImg from '../logo.jpeg';
-import { getStudentEventLink } from '../lib/quizService';
 
 interface LandingPageProps {
   quizzes: Quiz[];
@@ -37,7 +36,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       onSelectQuiz(matched.id);
       onJoinQuiz(matched.id);
     } else {
-      setCodeError(`No event found matching code "${cleanCode}". Check the code or select from the list below.`);
+      setCodeError(`No event found matching code "${cleanCode}". Please verify your event code or link.`);
     }
   };
 
@@ -62,13 +61,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => onOpenAuditorium(activeQuiz?.id)}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded border border-slate-200 transition-colors cursor-pointer"
-          >
-            <span>📽️</span>
-            <span>Auditorium Screen</span>
-          </button>
           <button
             onClick={onOpenAdmin}
             className="px-3 py-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors cursor-pointer flex items-center gap-1"
@@ -106,12 +98,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <span>🎓</span>
               <span>Join Active Event Now</span>
             </button>
-            <button
-              onClick={() => onOpenAuditorium(activeQuiz?.id)}
-              className="w-full sm:w-auto px-6 py-3.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-sm rounded transition-colors cursor-pointer"
-            >
-              Open Auditorium Projector
-            </button>
           </div>
 
           {/* Quick Event Code Search */}
@@ -139,117 +125,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             )}
           </form>
         </div>
-
-        {/* Multiple Events Grid */}
-        {quizzes.length > 0 && (
-          <div className="space-y-4 pt-6 border-t border-slate-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                  <span>🏆</span>
-                  <span>Active & Upcoming Competition Events ({quizzes.length})</span>
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Select your assigned event or use your organizer's direct event link
-                </p>
-              </div>
-              <span className="text-xs font-medium px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full border border-slate-200 w-fit">
-                {quizzes.filter((q) => q.status === 'LIVE').length} Live Now
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {quizzes.map((q) => {
-                const isActive = q.id === activeQuiz?.id;
-                const isLive = q.status === 'LIVE';
-                const isEnded = q.status === 'ENDED' || q.status === 'RESULTS_PUBLISHED';
-
-                return (
-                  <div
-                    key={q.id}
-                    className={`rounded-xl border transition-all p-5 flex flex-col justify-between space-y-4 ${
-                      isActive
-                        ? 'border-blue-500 bg-blue-50/40 shadow-xs ring-1 ring-blue-500'
-                        : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-xs'
-                    }`}
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span
-                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                            isLive
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : isEnded
-                              ? 'bg-purple-100 text-purple-800'
-                              : 'bg-slate-100 text-slate-700'
-                          }`}
-                        >
-                          {q.status}
-                        </span>
-                        <span className="text-[11px] font-mono text-slate-500">
-                          ID: {q.id}
-                        </span>
-                      </div>
-
-                      <h3 className="font-bold text-base text-slate-900 leading-snug">
-                        {q.title}
-                      </h3>
-
-                      <p className="text-xs text-slate-600 line-clamp-2">
-                        {q.description}
-                      </p>
-
-                      <div className="pt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
-                        <span>📅 {q.scheduledDate || 'Today'}</span>
-                        <span>⏰ {q.scheduledTime || 'Live'}</span>
-                        <span>⏱️ {q.questionDurationSeconds || 30}s/Q</span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 pt-2 border-t border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            onSelectQuiz(q.id);
-                            onJoinQuiz(q.id);
-                          }}
-                          className={`flex-1 py-2 px-3 text-xs font-bold rounded text-center transition-colors cursor-pointer flex items-center justify-center gap-1 ${
-                            isLive
-                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                              : 'bg-blue-600 hover:bg-blue-700 text-white'
-                          }`}
-                        >
-                          <span>{isLive ? '🔴 Join Live Quiz' : '🎓 Enter Lobby'}</span>
-                        </button>
-                        <button
-                          onClick={() => onOpenAuditorium(q.id)}
-                          title="Open Auditorium Big-Screen Display"
-                          className="py-2 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200 transition-colors cursor-pointer"
-                        >
-                          📽️
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[11px] text-slate-400">
-                        <span>Direct link:</span>
-                        <button
-                          onClick={async () => {
-                            const link = getStudentEventLink(q.id);
-                            await navigator.clipboard.writeText(link);
-                            alert(`Direct Student Link copied:\n${link}`);
-                          }}
-                          className="font-mono text-blue-600 hover:underline cursor-pointer"
-                        >
-                          📋 Copy Link
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </main>
 
       {/* Footer */}
@@ -258,12 +133,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           CSI Tech Clash • Real-Time Synchronized Competition Assessment Engine
         </div>
         <div className="flex items-center space-x-4">
-          <button
-            onClick={() => onOpenAuditorium(activeQuiz?.id)}
-            className="text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-          >
-            Auditorium Projector
-          </button>
           <button
             onClick={onOpenAdmin}
             className="text-slate-500 hover:text-slate-900 font-semibold transition-colors cursor-pointer flex items-center gap-1"
