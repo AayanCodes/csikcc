@@ -53,6 +53,7 @@ export const db = (() => {
       {
         experimentalForceLongPolling: true,
         experimentalAutoDetectLongPolling: true,
+        ignoreUndefinedProperties: true,
       },
       FIRESTORE_DATABASE_ID
     );

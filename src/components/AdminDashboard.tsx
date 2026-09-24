@@ -1655,6 +1655,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }}
         question={editingQuestion}
         quizId={quiz.id}
+        quizzes={quizzes}
         nextQuestionNumber={questions.length + 1}
         onSave={async (savedQ) => {
           await adminSaveQuestion(savedQ);

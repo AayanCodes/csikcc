@@ -900,11 +900,26 @@ export async function adminDeleteSingleResult(resultId: string): Promise<void> {
 
 export async function adminSaveQuestion(question: Question): Promise<void> {
   try {
+    const cleanQuestion: Record<string, any> = {
+      id: question.id,
+      quizId: question.quizId,
+      questionNumber: question.questionNumber,
+      questionText: question.questionText,
+      options: question.options,
+      correctOptionIndex: question.correctOptionIndex,
+      durationSeconds: question.durationSeconds || 30,
+      createdAt: question.createdAt || new Date().toISOString(),
+    };
+
+    if (question.imageUrl && question.imageUrl.trim().length > 0) {
+      cleanQuestion.imageUrl = question.imageUrl.trim();
+    }
+
     const batch = writeBatch(db);
-    batch.set(doc(db, 'questions', question.id), question);
+    batch.set(doc(db, 'questions', question.id), cleanQuestion);
 
     if (question.quizId) {
-      // Update totalQuestions if needed
+      // Update totalQuestions in the quiz
       const qQuery = query(collection(db, 'questions'), where('quizId', '==', question.quizId));
       const snapshot = await getDocs(qQuery);
       const allQuestions: Question[] = [];
@@ -913,13 +928,13 @@ export async function adminSaveQuestion(question: Question): Promise<void> {
         const data = d.data() as Question;
         if (data.id === question.id) {
           exists = true;
-          allQuestions.push(question);
+          allQuestions.push(cleanQuestion as Question);
         } else {
           allQuestions.push(data);
         }
       });
       if (!exists) {
-        allQuestions.push(question);
+        allQuestions.push(cleanQuestion as Question);
       }
 
       batch.set(
@@ -930,6 +945,22 @@ export async function adminSaveQuestion(question: Question): Promise<void> {
         },
         { merge: true }
       );
+
+      // If quizState exists, keep totalQuestions in sync
+      const stateDoc = await getDoc(doc(db, 'quizState', question.quizId));
+      if (stateDoc.exists()) {
+        const sData = stateDoc.data() as QuizState;
+        const stateUpdates: Record<string, any> = {
+          totalQuestions: allQuestions.length,
+          updatedAt: Date.now(),
+        };
+        // If currentQuestionId is missing or empty, set it
+        if (!sData.currentQuestionId) {
+          stateUpdates.currentQuestionId = question.id;
+          stateUpdates.currentQuestionNumber = question.questionNumber || 1;
+        }
+        batch.set(doc(db, 'quizState', question.quizId), stateUpdates, { merge: true });
+      }
     }
 
     await batch.commit();

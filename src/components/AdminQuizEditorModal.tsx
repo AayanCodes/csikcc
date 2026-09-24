@@ -155,20 +155,24 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
 
     setIsSaving(true);
     try {
+      const cleanImg = imageUrl.trim();
       const qObj: Question = {
         id: question ? question.id : `q_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        quizId: targetQuizId,
+        quizId: targetQuizId || quizId,
         questionNumber: question ? question.questionNumber : nextQuestionNumber,
         questionText: questionText.trim(),
-        imageUrl: imageUrl.trim() || undefined,
         options: [optA.trim(), optB.trim(), optC.trim(), optD.trim()],
         correctOptionIndex: correctIndex,
         durationSeconds: duration > 0 ? duration : 30,
         createdAt: question?.createdAt || new Date().toISOString(),
       };
+      if (cleanImg) {
+        qObj.imageUrl = cleanImg;
+      }
       await onSave(qObj);
       onClose();
     } catch (err) {
+      console.error('Failed to save question:', err);
       setError(err instanceof Error ? err.message : 'Failed to save question.');
     } finally {
       setIsSaving(false);
