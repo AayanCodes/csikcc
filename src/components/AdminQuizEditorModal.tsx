@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Question } from '../types';
+import { Question, Quiz } from '../types';
 
 interface AdminQuestionModalProps {
   isOpen: boolean;
   onClose: () => void;
   question: Question | null;
   quizId: string;
+  quizzes?: Quiz[];
   nextQuestionNumber: number;
   onSave: (question: Question) => Promise<void>;
 }
@@ -60,9 +61,11 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
   onClose,
   question,
   quizId,
+  quizzes,
   nextQuestionNumber,
   onSave,
 }) => {
+  const [targetQuizId, setTargetQuizId] = useState(quizId);
   const [questionText, setQuestionText] = useState('');
   const [optA, setOptA] = useState('');
   const [optB, setOptB] = useState('');
@@ -79,6 +82,7 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
 
   useEffect(() => {
     if (question) {
+      setTargetQuizId(question.quizId || quizId);
       setQuestionText(question.questionText);
       setImageUrl(question.imageUrl || '');
       setOptA(question.options[0] || '');
@@ -88,6 +92,7 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
       setCorrectIndex(question.correctOptionIndex);
       setDuration(question.durationSeconds || 30);
     } else {
+      setTargetQuizId(quizId);
       setQuestionText('');
       setImageUrl('');
       setOptA('');
@@ -98,7 +103,7 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
       setDuration(30);
     }
     setError(null);
-  }, [question, isOpen]);
+  }, [question, quizId, isOpen]);
 
   const handleProcessFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -135,6 +140,8 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
 
   if (!isOpen) return null;
 
+  const targetQuiz = quizzes?.find((q) => q.id === targetQuizId);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!questionText.trim()) {
@@ -150,7 +157,7 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
     try {
       const qObj: Question = {
         id: question ? question.id : `q_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        quizId,
+        quizId: targetQuizId,
         questionNumber: question ? question.questionNumber : nextQuestionNumber,
         questionText: questionText.trim(),
         imageUrl: imageUrl.trim() || undefined,
@@ -172,9 +179,16 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white border border-slate-200 rounded-lg shadow-xl max-w-xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 className="text-lg font-bold text-slate-900">
-            {question ? `Edit Question #${question.questionNumber}` : `Add Question #${nextQuestionNumber}`}
-          </h3>
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">
+              {question ? `Edit Question #${question.questionNumber}` : `Add Question #${nextQuestionNumber}`}
+            </h3>
+            {targetQuiz && (
+              <p className="text-xs text-blue-600 font-medium mt-0.5">
+                Event: {targetQuiz.title} <span className="text-slate-400 font-mono text-[11px]">({targetQuiz.id})</span>
+              </p>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-700 text-sm font-semibold p-1 cursor-pointer"
@@ -190,6 +204,29 @@ export const AdminQuestionModal: React.FC<AdminQuestionModalProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Target Event Selector */}
+          {quizzes && quizzes.length > 0 && (
+            <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                Target Competition Event
+              </label>
+              <select
+                value={targetQuizId}
+                onChange={(e) => setTargetQuizId(e.target.value)}
+                disabled={Boolean(question)}
+                className="w-full px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {quizzes.map((qz) => (
+                  <option key={qz.id} value={qz.id}>
+                    {qz.title} ({qz.totalQuestions || 0} Qs) [ID: {qz.id}]
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-500 mt-1">
+                This question will be saved and assigned exclusively to this competition event.
+              </p>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
               Question Text

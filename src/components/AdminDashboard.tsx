@@ -19,6 +19,10 @@ import {
   adminSaveQuestion,
   adminDeleteQuestion,
   adminSaveQuiz,
+  adminDeleteSingleParticipant,
+  adminDeleteAllParticipants,
+  adminClearOfficialResults,
+  adminDeleteSingleResult,
   getStudentEventLink,
   getAuditoriumEventLink,
 } from '../lib/quizService';
@@ -305,19 +309,105 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleReset = async () => {
+  const handleReset = async (wipeData: boolean = false) => {
     setActionError(null);
     setActionLoading(true);
     try {
       const sortedQuestions = [...questions].sort((a, b) => a.questionNumber - b.questionNumber);
-      await adminResetQuiz(quiz.id, sortedQuestions[0]?.id);
-      showFeedback('Quiz session reset to WAITING lobby status. Students remain in waiting lobby.');
+      await adminResetQuiz(quiz.id, sortedQuestions[0]?.id, wipeData);
+      showFeedback(
+        wipeData
+          ? 'Quiz session, participants, and results completely cleared and reset to WAITING status.'
+          : 'Quiz session reset to WAITING lobby status. Students remain in waiting lobby.'
+      );
     } catch (err) {
       console.error('Failed to reset quiz:', err);
       setActionError('Failed to reset quiz: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleDeleteAllParticipants = () => {
+    setConfirmModal({
+      title: `Delete All Participants for "${quiz.title}"?`,
+      message: `Are you sure you want to permanently delete all ${participants.length} registered students, their answers, and clear published results for this event? This will refresh the student registration list in Firestore.`,
+      confirmLabel: 'Yes, Delete All Participants',
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          const res = await adminDeleteAllParticipants(quiz.id);
+          setConfirmModal(null);
+          showFeedback(
+            `Deleted ${res.participantsDeleted} student(s) and ${res.answersDeleted} submitted answer(s). Registration list refreshed!`
+          );
+        } catch (err) {
+          setActionError('Failed to delete participants: ' + (err instanceof Error ? err.message : String(err)));
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
+  };
+
+  const handleDeleteSingleParticipant = (p: Participant) => {
+    setConfirmModal({
+      title: `Delete Student "${p.name}"?`,
+      message: `Remove student ${p.name} (Roll: ${p.rollNumber}, Department: ${p.department}) and all their submitted answers from this event?`,
+      confirmLabel: 'Delete Student',
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          await adminDeleteSingleParticipant(p.id, quiz.id);
+          setConfirmModal(null);
+          showFeedback(`Student "${p.name}" removed successfully.`);
+        } catch (err) {
+          setActionError('Failed to delete participant: ' + (err instanceof Error ? err.message : String(err)));
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
+  };
+
+  const handleClearOfficialResults = () => {
+    setConfirmModal({
+      title: `Clear & Refresh Official Results for "${quiz.title}"?`,
+      message: `Are you sure you want to delete all ${results.length} official published results for this event from Firestore? This will refresh and clear the leaderboard on the auditorium projector and student screens, resetting event status so you can re-run or recalculate fresh results.`,
+      confirmLabel: 'Yes, Clear All Results',
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          const count = await adminClearOfficialResults(quiz.id);
+          setConfirmModal(null);
+          showFeedback(`Cleared ${count} official result records. Event results refreshed!`);
+        } catch (err) {
+          setActionError('Failed to clear results: ' + (err instanceof Error ? err.message : String(err)));
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
+  };
+
+  const handleDeleteSingleResult = (r: QuizResult) => {
+    setConfirmModal({
+      title: `Delete Result Record for "${r.name}"?`,
+      message: `Remove rank #${r.rank} result record for ${r.name} (Roll: ${r.rollNumber}, Score: ${r.score}/${r.totalQuestions})?`,
+      confirmLabel: 'Delete Result',
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          await adminDeleteSingleResult(r.id);
+          setConfirmModal(null);
+          showFeedback(`Result record for "${r.name}" deleted.`);
+        } catch (err) {
+          setActionError('Failed to delete result: ' + (err instanceof Error ? err.message : String(err)));
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
   };
 
   const handleSaveQuizDetails = async (e: React.FormEvent) => {
@@ -1313,13 +1403,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* TAB 3: REAL PARTICIPANTS */}
         {activeTab === 'participants' && (
           <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-xs space-y-4">
-            <div className="border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">
-                Live Participant Register ({participants.length})
-              </h3>
-              <p className="text-xs text-slate-500">
-                Real student records synced directly from Firestore. No mock participants.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Live Participant Register ({participants.length})
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Real student records synced directly from Firestore. No mock participants.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDeleteAllParticipants}
+                  disabled={participants.length === 0 || actionLoading}
+                  className="px-3.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 hover:border-red-300 font-semibold text-xs rounded transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                  title="Permanently remove all participants and responses to refresh the event register"
+                >
+                  <span>🗑️</span>
+                  <span>Delete All Participants ({participants.length})</span>
+                </button>
+              </div>
             </div>
 
             {participants.length === 0 ? (
@@ -1337,6 +1441,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="py-3 px-4">Department</th>
                       <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4 text-right">Live Score</th>
+                      <th className="py-3 px-4 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1362,6 +1467,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900">
                           {p.score || 0}
                         </td>
+                        <td className="py-2.5 px-4 text-center">
+                          <button
+                            onClick={() => handleDeleteSingleParticipant(p)}
+                            disabled={actionLoading}
+                            className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded text-[11px] font-semibold transition-colors cursor-pointer border border-red-200 disabled:opacity-50"
+                            title="Delete this participant and their answers"
+                          >
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1383,18 +1498,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   Rankings computed authoritatively from actual answer submissions in Firestore.
                 </p>
               </div>
-              <button
-                onClick={handlePublish}
-                disabled={actionLoading}
-                className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-medium text-xs rounded transition-colors cursor-pointer"
-              >
-                Recalculate & Publish Results
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePublish}
+                  disabled={actionLoading}
+                  className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-medium text-xs rounded transition-colors cursor-pointer"
+                >
+                  Recalculate & Publish Results
+                </button>
+                <button
+                  onClick={handleClearOfficialResults}
+                  disabled={results.length === 0 || actionLoading}
+                  className="px-3.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 hover:border-red-300 font-semibold text-xs rounded transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                  title="Clear official results from Firestore and reset event status"
+                >
+                  <span>🔄</span>
+                  <span>Clear & Refresh Results ({results.length})</span>
+                </button>
+              </div>
             </div>
 
             {results.length === 0 ? (
               <div className="text-center py-12 text-slate-400 text-sm">
-                Results have not yet been published. Click "Recalculate & Publish Results" after students have submitted answers.
+                Results have not yet been published or have been refreshed. Click "Recalculate & Publish Results" after students have submitted answers.
               </div>
             ) : (
               <div className="overflow-x-auto border border-slate-200 rounded">
@@ -1409,6 +1535,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="py-3 px-4 text-right">Correct</th>
                       <th className="py-3 px-4 text-right">Incorrect</th>
                       <th className="py-3 px-4 text-right">Accuracy</th>
+                      <th className="py-3 px-4 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1431,6 +1558,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900">
                           {r.percentage}%
+                        </td>
+                        <td className="py-2.5 px-4 text-center">
+                          <button
+                            onClick={() => handleDeleteSingleResult(r)}
+                            disabled={actionLoading}
+                            className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded text-[11px] font-semibold transition-colors cursor-pointer border border-red-200 disabled:opacity-50"
+                            title="Delete this result"
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     ))}

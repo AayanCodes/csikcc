@@ -35,7 +35,7 @@ export const AdminCreateEventModal: React.FC<AdminCreateEventModalProps> = ({
       setScheduledDate(today);
       setScheduledTime('11:00');
       setDuration(30);
-      setSeedQuestions(true);
+      setSeedQuestions(false);
       setError(null);
     }
   }, [isOpen]);
@@ -228,20 +228,57 @@ export const AdminCreateEventModal: React.FC<AdminCreateEventModalProps> = ({
             />
           </div>
 
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2.5">
-            <input
-              type="checkbox"
-              id="seedQuestions"
-              checked={seedQuestions}
-              onChange={(e) => setSeedQuestions(e.target.checked)}
-              className="mt-0.5 h-4 w-4 text-blue-600 rounded border-slate-300 cursor-pointer"
-            />
-            <label htmlFor="seedQuestions" className="text-xs text-blue-950 cursor-pointer leading-tight">
-              <strong>Pre-seed 4 starter questions</strong>
-              <span className="block text-[11px] text-blue-800 mt-0.5">
-                Automatically populates 4 collegiate computer science questions so you can test or run the live quiz right away. You can edit or replace them anytime.
-              </span>
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+              Questions Setup for this Event
             </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <label
+                onClick={() => setSeedQuestions(false)}
+                className={`p-3 rounded-lg border flex items-start gap-2.5 cursor-pointer transition-all ${
+                  !seedQuestions
+                    ? 'border-blue-600 bg-blue-50/60 ring-1 ring-blue-500 text-blue-950 font-medium'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="seedOption"
+                  checked={!seedQuestions}
+                  onChange={() => setSeedQuestions(false)}
+                  className="mt-0.5 text-blue-600"
+                />
+                <div>
+                  <strong className="block font-bold">Blank Event (0 Questions)</strong>
+                  <span className="text-[11px] text-slate-500 block mt-0.5">
+                    Recommended: Add your own separate, unique questions for this event.
+                  </span>
+                </div>
+              </label>
+
+              <label
+                onClick={() => setSeedQuestions(true)}
+                className={`p-3 rounded-lg border flex items-start gap-2.5 cursor-pointer transition-all ${
+                  seedQuestions
+                    ? 'border-blue-600 bg-blue-50/60 ring-1 ring-blue-500 text-blue-950 font-medium'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="seedOption"
+                  checked={seedQuestions}
+                  onChange={() => setSeedQuestions(true)}
+                  className="mt-0.5 text-blue-600"
+                />
+                <div>
+                  <strong className="block font-bold">Sample Template (4 Questions)</strong>
+                  <span className="text-[11px] text-slate-500 block mt-0.5">
+                    Pre-populate with 4 sample computer science starter questions.
+                  </span>
+                </div>
+              </label>
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">

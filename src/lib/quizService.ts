@@ -722,7 +722,11 @@ export async function adminPublishResults(
   }
 }
 
-export async function adminResetQuiz(quizId: string, firstQuestionId?: string): Promise<void> {
+export async function adminResetQuiz(
+  quizId: string,
+  firstQuestionId?: string,
+  wipeParticipants: boolean = false
+): Promise<void> {
   try {
     const now = Date.now();
     const batch = writeBatch(db);
@@ -751,8 +755,146 @@ export async function adminResetQuiz(quizId: string, firstQuestionId?: string): 
     );
 
     await batch.commit();
+
+    if (wipeParticipants) {
+      await adminDeleteAllParticipants(quizId);
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `quizState/${quizId}`);
+  }
+}
+
+// Helper to delete all documents matching a query in safe chunks up to 400
+async function deleteQueryBatch(q: any): Promise<number> {
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return 0;
+
+  let count = 0;
+  let batch = writeBatch(db);
+  let batchCount = 0;
+
+  for (const docSnapshot of snapshot.docs) {
+    batch.delete(docSnapshot.ref);
+    count++;
+    batchCount++;
+    if (batchCount >= 400) {
+      await batch.commit();
+      batch = writeBatch(db);
+      batchCount = 0;
+    }
+  }
+
+  if (batchCount > 0) {
+    await batch.commit();
+  }
+
+  return count;
+}
+
+// Delete a single participant and their answers/results from Firestore
+export async function adminDeleteSingleParticipant(participantId: string, quizId: string): Promise<void> {
+  try {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'participants', participantId));
+    batch.delete(doc(db, 'results', `${quizId}_${participantId}`));
+    await batch.commit();
+
+    // Also remove any submitted answers by this participant
+    const answersQ = query(
+      collection(db, 'answers'),
+      where('quizId', '==', quizId),
+      where('participantId', '==', participantId)
+    );
+    await deleteQueryBatch(answersQ);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `participants/${participantId}`);
+  }
+}
+
+// Delete ALL participants, answers, and results for a specific quiz event
+export async function adminDeleteAllParticipants(quizId: string): Promise<{
+  participantsDeleted: number;
+  answersDeleted: number;
+  resultsDeleted: number;
+}> {
+  try {
+    const pQ = query(collection(db, 'participants'), where('quizId', '==', quizId));
+    const aQ = query(collection(db, 'answers'), where('quizId', '==', quizId));
+    const rQ = query(collection(db, 'results'), where('quizId', '==', quizId));
+
+    const [participantsDeleted, answersDeleted, resultsDeleted] = await Promise.all([
+      deleteQueryBatch(pQ),
+      deleteQueryBatch(aQ),
+      deleteQueryBatch(rQ),
+    ]);
+
+    // Reset quiz status to WAITING if it was in RESULTS_PUBLISHED
+    const quizDoc = await getDoc(doc(db, 'quizzes', quizId));
+    if (quizDoc.exists()) {
+      const qData = quizDoc.data() as Quiz;
+      if (qData.status === 'RESULTS_PUBLISHED') {
+        const batch = writeBatch(db);
+        batch.set(
+          doc(db, 'quizzes', quizId),
+          { status: 'WAITING', updatedAt: new Date().toISOString() },
+          { merge: true }
+        );
+        batch.set(
+          doc(db, 'quizState', quizId),
+          { status: 'WAITING', updatedAt: Date.now() },
+          { merge: true }
+        );
+        await batch.commit();
+      }
+    }
+
+    return { participantsDeleted, answersDeleted, resultsDeleted };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `participants`);
+    return { participantsDeleted: 0, answersDeleted: 0, resultsDeleted: 0 };
+  }
+}
+
+// Clear / Delete official calculated results for a quiz event to refresh and reset the leaderboard
+export async function adminClearOfficialResults(quizId: string): Promise<number> {
+  try {
+    const rQ = query(collection(db, 'results'), where('quizId', '==', quizId));
+    const resultsDeleted = await deleteQueryBatch(rQ);
+
+    // Revert quiz status back from RESULTS_PUBLISHED to ENDED (awaiting new recalculation)
+    const batch = writeBatch(db);
+    batch.set(
+      doc(db, 'quizState', quizId),
+      {
+        status: 'ENDED',
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    );
+
+    batch.set(
+      doc(db, 'quizzes', quizId),
+      {
+        status: 'ENDED',
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+
+    await batch.commit();
+    return resultsDeleted;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `results`);
+    return 0;
+  }
+}
+
+// Delete a single result document by resultId
+export async function adminDeleteSingleResult(resultId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'results', resultId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `results/${resultId}`);
   }
 }
 
